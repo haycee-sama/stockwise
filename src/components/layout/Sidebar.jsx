@@ -59,8 +59,7 @@ export default function Sidebar() {
             <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <Package size={16} className="text-white" />
             </div>
-            <span className="text-white font-bold text-lg tracking-tight"
-              style={{ fontFamily: 'sans-serif' }}>
+            <span className="text-white font-bold text-lg tracking-tight">
               Stockwise
             </span>
           </div>
@@ -147,8 +146,7 @@ export default function Sidebar() {
 
         {/* User pill */}
         <div className={`flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5 mt-2 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-            style={{ fontFamily: 'sans-serif' }}>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
             {initials}
           </div>
           {!collapsed && (

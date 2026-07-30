@@ -51,7 +51,7 @@ export default function ViewOrderModal({ isOpen, order, onClose }) {
               <FileText size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 className="text-sm font-bold text-gray-900">
                 Order Receipt
               </h2>
               <div className="flex items-center gap-1.5 mt-0.5">
@@ -96,7 +96,7 @@ export default function ViewOrderModal({ isOpen, order, onClose }) {
             {/* Customer */}
             <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3.5 border border-gray-200">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
-                style={{ background: order.customer.color, color: order.customer.textColor, fontFamily: 'sans-serif' }}>
+                style={{ background: order.customer.color, color: order.customer.textColor }}>
                 {order.customer.initials}
               </div>
               <div>
@@ -140,8 +140,7 @@ export default function ViewOrderModal({ isOpen, order, onClose }) {
               {/* Total */}
               <div className="flex items-center justify-between bg-green-50 px-4 py-3.5 border-t border-green-100">
                 <p className="text-sm font-bold text-gray-700">Total Amount</p>
-                <p className="text-xl font-extrabold text-green-600 tabular-nums"
-                  style={{ fontFamily: 'sans-serif' }}>
+                <p className="text-xl font-extrabold text-green-600 tabular-nums">
                   {naira(order.total)}
                 </p>
               </div>

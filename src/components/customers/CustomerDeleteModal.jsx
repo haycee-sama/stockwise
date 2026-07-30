@@ -13,8 +13,7 @@ export default function CustomerDeleteModal({ isOpen, customer, onClose, onConfi
           <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <UserX size={24} className="text-red-500" />
           </div>
-          <h3 className="text-base font-bold text-gray-900 text-center mb-4"
-            style={{ fontFamily: 'sans-serif' }}>
+          <h3 className="text-base font-bold text-gray-900 text-center mb-4">
             Remove {customer.firstName} {customer.lastName}?
           </h3>
           {customer.totalOrders > 0 && (

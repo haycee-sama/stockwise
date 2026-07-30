@@ -20,8 +20,7 @@ export default function TopSellersTable() {
             <ShoppingBag size={15} className="text-orange-500" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-gray-900"
-              style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-sm font-bold text-gray-900">
               Top Sellers
             </h3>
             <p className="text-[11px] text-gray-400">Best performers this month</p>

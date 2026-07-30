@@ -13,8 +13,7 @@ export default function ExpenseDeleteModal({ isOpen, expense, onClose, onConfirm
         <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Trash2 size={26} className="text-red-500" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 text-center mb-2"
-          style={{ fontFamily: 'sans-serif' }}>
+        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">
           Delete Expense?
         </h3>
         <p className="text-sm text-gray-500 text-center mb-4 leading-relaxed">

@@ -1,6 +1,14 @@
 // src/pages/auth/SignupPage.jsx
 import SignupForm from '../../components/auth/SignupForm';
-import { Package } from 'lucide-react';
+import { Package, Check, ShieldCheck } from 'lucide-react';
+
+const trustFeatures = [
+  'Real-time stock tracking',
+  'Low stock alerts & notifications',
+  'Sales and profit insights',
+  'Multi-location support',
+  'No credit card required to start',
+];
 
 export default function SignupPage() {
   return (
@@ -32,14 +40,9 @@ export default function SignupPage() {
           </p>
 
           {/* Feature List */}
-          {[
-            '✅ Real-time stock tracking',
-            '✅ Low stock alerts & notifications',
-            '✅ Sales and profit insights',
-            '✅ Multi-location support',
-            '✅ No credit card required to start',
-          ].map((feature) => (
-            <div key={feature} className="text-green-100 mb-3 text-sm font-medium">
+          {trustFeatures.map((feature) => (
+            <div key={feature} className="flex items-center gap-2 text-green-100 mb-3 text-sm font-medium">
+              <Check size={16} className="text-green-300 flex-shrink-0" />
               {feature}
             </div>
           ))}
@@ -57,8 +60,9 @@ export default function SignupPage() {
             </div>
             <span className="text-green-200 text-sm">500+ businesses joined this month</span>
           </div>
-          <p className="text-green-300 text-xs">
-            🔒 Your data is encrypted and secure. We never share your business information.
+          <p className="flex items-center gap-2 text-green-300 text-xs">
+            <ShieldCheck size={14} className="flex-shrink-0" />
+            Your data is encrypted and secure. We never share your business information.
           </p>
         </div>
       </div>

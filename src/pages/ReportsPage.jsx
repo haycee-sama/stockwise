@@ -72,7 +72,7 @@ const periods = [
 function ReportCard({ title, subtitle, children }) {
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm">
-      <h3 className="text-sm font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'sans-serif' }}>{title}</h3>
+      <h3 className="text-sm font-bold text-gray-900 mb-0.5">{title}</h3>
       {subtitle && <p className="text-xs text-gray-400 mb-5">{subtitle}</p>}
       {children}
     </div>
@@ -83,8 +83,7 @@ function ReportCard({ title, subtitle, children }) {
 function KpiPill({ value, label, color, bg }) {
   return (
     <div className={`${bg} rounded-xl p-3 sm:p-4 text-center`}>
-      <p className={`text-lg sm:text-xl font-extrabold ${color} tabular-nums`}
-        style={{ fontFamily: 'sans-serif' }}>{value}</p>
+      <p className={`text-lg sm:text-xl font-extrabold ${color} tabular-nums`}>{value}</p>
       <p className="text-[10px] text-gray-500 font-medium mt-0.5 truncate">{label}</p>
     </div>
   );
@@ -117,7 +116,7 @@ function HealthBanner() {
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
-            <h2 className="text-white text-base font-bold" style={{ fontFamily: 'sans-serif' }}>
+            <h2 className="text-white text-base font-bold">
               Business Health Overview
             </h2>
             <p className="text-gray-400 text-xs mt-0.5">6-month cumulative performance</p>
@@ -140,8 +139,7 @@ function HealthBanner() {
                     {kpi.change}
                   </span>
                 </div>
-                <p className="text-white font-extrabold text-sm leading-none tabular-nums"
-                  style={{ fontFamily: 'sans-serif' }}>{kpi.value}</p>
+                <p className="text-white font-extrabold text-sm leading-none tabular-nums">{kpi.value}</p>
                 <p className="text-gray-400 text-[10px] font-medium mt-1">{kpi.label}</p>
               </div>
             );
@@ -210,7 +208,7 @@ function SalesReport() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
         <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>Top Selling Products</h3>
+            <h3 className="text-sm font-bold text-gray-900">Top Selling Products</h3>
             <p className="text-xs text-gray-400 mt-0.5">By revenue this period</p>
           </div>
           <div className="overflow-x-auto">
@@ -327,7 +325,7 @@ function InventoryReport() {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute text-center pointer-events-none">
-              <p className="text-xl font-extrabold text-gray-900" style={{ fontFamily: 'sans-serif' }}>1,248</p>
+              <p className="text-xl font-extrabold text-gray-900">1,248</p>
               <p className="text-[10px] text-gray-400">total</p>
             </div>
           </div>
@@ -399,7 +397,7 @@ function CustomerReport() {
       </div>
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>Top Customers by Revenue</h3>
+          <h3 className="text-sm font-bold text-gray-900">Top Customers by Revenue</h3>
           <p className="text-xs text-gray-400 mt-0.5">Highest lifetime value</p>
         </div>
         <div className="overflow-x-auto">
@@ -483,7 +481,7 @@ function ExpensesReport() {
                   <span className="text-sm font-semibold text-gray-700">{cat.name}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-gray-400">{cat.pct}%</span>
-                    <span className="text-sm font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(cat.amount)}</span>
+                    <span className="text-sm font-extrabold text-gray-900 tabular-nums">{naira(cat.amount)}</span>
                   </div>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -495,7 +493,7 @@ function ExpensesReport() {
         </ReportCard>
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>Largest Expenses</h3>
+            <h3 className="text-sm font-bold text-gray-900">Largest Expenses</h3>
             <p className="text-xs text-gray-400 mt-0.5">Top 5 by amount</p>
           </div>
           <div className="divide-y divide-gray-50">

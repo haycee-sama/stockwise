@@ -90,8 +90,7 @@ function SummaryCard({ icon: Icon, iconBg, iconColor, label, value, sub, subColo
         </div>
         <div className="min-w-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate tabular-nums"
-            style={{ fontFamily: 'sans-serif' }}>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate tabular-nums">
             {value}
           </p>
           {sub && (
@@ -115,7 +114,7 @@ function SaleCard({ order, onView }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-            style={{ background: order.customer.color, color: order.customer.textColor, fontFamily: 'sans-serif' }}>
+            style={{ background: order.customer.color, color: order.customer.textColor }}>
             {order.customer.initials}
           </div>
           <div>
@@ -123,8 +122,7 @@ function SaleCard({ order, onView }) {
             <p className="text-[11px] text-gray-400 font-mono">#{order.id}</p>
           </div>
         </div>
-        <p className="text-base font-extrabold text-gray-900 tabular-nums"
-          style={{ fontFamily: 'sans-serif' }}>
+        <p className="text-base font-extrabold text-gray-900 tabular-nums">
           {naira(order.total)}
         </p>
       </div>
@@ -351,7 +349,7 @@ export default function SalesPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <ShoppingBag size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2" style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-base font-bold text-gray-700 mb-2">
               No orders found
             </h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
@@ -405,7 +403,7 @@ export default function SalesPage() {
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-                              style={{ background: order.customer.color, color: order.customer.textColor, fontFamily: 'sans-serif' }}>
+                              style={{ background: order.customer.color, color: order.customer.textColor }}>
                               {order.customer.initials}
                             </div>
                             <span className="text-sm font-semibold text-gray-800 truncate max-w-[120px]">

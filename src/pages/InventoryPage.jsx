@@ -67,8 +67,7 @@ function MiniStat({ icon: Icon, iconBg, iconColor, label, value, animDelay }) {
           <Icon size={19} className={iconColor} />
         </div>
         <div className="min-w-0">
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate"
-            style={{ fontFamily: 'sans-serif' }}>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate">
             {value}
           </p>
           <p className="text-[11px] text-gray-400 font-medium mt-0.5 truncate">{label}</p>
@@ -389,8 +388,7 @@ export default function InventoryPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Package size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2"
-              style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-base font-bold text-gray-700 mb-2">
               No items found
             </h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">

@@ -44,13 +44,13 @@ export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder }) 
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+          <h2 className="text-base font-bold text-gray-900">
             Vendor Profile
           </h2>
           <div className="flex items-center gap-2">
             <button onClick={onPlaceOrder}
               className="flex items-center gap-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg transition-all">
-              📦 Place Order
+              <Package size={13} /> Place Order
             </button>
             <button onClick={onEdit}
               className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-all">
@@ -69,12 +69,12 @@ export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder }) 
             <div className="flex items-start gap-4">
               <div
                 className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-extrabold flex-shrink-0"
-                style={{ background: vendor.color, color: vendor.textColor, fontFamily: 'sans-serif' }}>
+                style={{ background: vendor.color, color: vendor.textColor }}>
                 {vendor.initials}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h3 className="text-lg font-extrabold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+                  <h3 className="text-lg font-extrabold text-gray-900">
                     {vendor.name}
                   </h3>
                   <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold capitalize
@@ -120,20 +120,19 @@ export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder }) 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3 px-6 py-4 border-b border-gray-100">
             <div className="bg-green-50 rounded-xl p-3 text-center">
-              <p className="text-base font-extrabold text-green-700" style={{ fontFamily: 'sans-serif' }}>
+              <p className="text-base font-extrabold text-green-700">
                 {naira(vendor.totalPaid)}
               </p>
               <p className="text-[10px] text-green-600 font-semibold mt-0.5">Total Paid</p>
             </div>
             <div className="bg-blue-50 rounded-xl p-3 text-center">
-              <p className="text-base font-extrabold text-blue-700" style={{ fontFamily: 'sans-serif' }}>
+              <p className="text-base font-extrabold text-blue-700">
                 {vendor.totalOrders}
               </p>
               <p className="text-[10px] text-blue-600 font-semibold mt-0.5">Orders</p>
             </div>
             <div className={`${vendor.pendingAmount > 0 ? 'bg-amber-50' : 'bg-gray-50'} rounded-xl p-3 text-center`}>
-              <p className={`text-base font-extrabold ${vendor.pendingAmount > 0 ? 'text-amber-700' : 'text-gray-500'}`}
-                style={{ fontFamily: 'sans-serif' }}>
+              <p className={`text-base font-extrabold ${vendor.pendingAmount > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
                 {vendor.pendingAmount > 0 ? naira(vendor.pendingAmount) : '₦0'}
               </p>
               <p className={`text-[10px] font-semibold mt-0.5 ${vendor.pendingAmount > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
@@ -159,7 +158,7 @@ export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder }) 
             <div className="px-6 py-4 border-b border-gray-100">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Notes</p>
               <p className="text-sm text-gray-600 leading-relaxed bg-amber-50 rounded-xl px-4 py-3 border border-amber-100">
-                📝 {vendor.note}
+                {vendor.note}
               </p>
             </div>
           )}

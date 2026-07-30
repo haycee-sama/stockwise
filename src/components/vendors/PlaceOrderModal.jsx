@@ -1,6 +1,6 @@
 // src/components/vendors/PlaceOrderModal.jsx
 import { useState } from 'react';
-import { X, ShoppingCart, Loader2, Plus, Minus, Trash2 } from 'lucide-react';
+import { X, ShoppingCart, Loader2, Plus, Minus, Trash2, Package } from 'lucide-react';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 
@@ -65,7 +65,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
               <ShoppingCart size={17} className="text-green-600" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 className="text-base font-bold text-gray-900">
                 Place Order
               </h2>
               <p className="text-xs text-gray-400">
@@ -174,7 +174,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
           {/* Order Total */}
           <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-5 py-4">
             <span className="text-sm font-bold text-gray-700">Order Total</span>
-            <span className="text-xl font-extrabold text-green-600" style={{ fontFamily: 'sans-serif' }}>
+            <span className="text-xl font-extrabold text-green-600">
               {naira(total)}
             </span>
           </div>
@@ -201,7 +201,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
               className="flex-[2] py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-bold transition-all flex items-center justify-center gap-2">
               {saving
                 ? <><Loader2 size={15} className="animate-spin" /> Placing Order...</>
-                : <>📦 Place Order · {naira(total)}</>
+                : <><Package size={15} /> Place Order · {naira(total)}</>
               }
             </button>
           </div>

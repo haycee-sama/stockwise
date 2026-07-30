@@ -38,8 +38,7 @@ export default function RevenueChart() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
         <div>
-          <h3 className="text-sm font-bold text-gray-900"
-            style={{ fontFamily: 'sans-serif' }}>
+          <h3 className="text-sm font-bold text-gray-900">
             Revenue Overview
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">Sales performance vs previous period</p>

@@ -40,8 +40,7 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay }) {
         </div>
         <div className="min-w-0">
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-0.5 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate"
-            style={{ fontFamily: 'sans-serif' }}>{value}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate">{value}</p>
           {sub && <p className="text-[11px] text-gray-400 font-medium mt-0.5">{sub}</p>}
         </div>
       </div>
@@ -55,7 +54,7 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center text-base font-extrabold flex-shrink-0"
-            style={{ background: vendor.color, color: vendor.textColor, fontFamily: 'sans-serif' }}>
+            style={{ background: vendor.color, color: vendor.textColor }}>
             {vendor.initials}
           </div>
           <div className="min-w-0">
@@ -102,11 +101,11 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-          <p className="text-sm font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(vendor.totalPaid)}</p>
+          <p className="text-sm font-extrabold text-gray-900 tabular-nums">{naira(vendor.totalPaid)}</p>
           <p className="text-[10px] text-gray-400 font-medium">Total Paid</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-          <p className="text-sm font-extrabold text-gray-900" style={{ fontFamily: 'sans-serif' }}>{vendor.totalOrders}</p>
+          <p className="text-sm font-extrabold text-gray-900">{vendor.totalOrders}</p>
           <p className="text-[10px] text-gray-400 font-medium">Orders</p>
         </div>
       </div>
@@ -288,7 +287,7 @@ export default function VendorsPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Truck size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2" style={{ fontFamily: 'sans-serif' }}>No vendors found</h3>
+            <h3 className="text-base font-bold text-gray-700 mb-2">No vendors found</h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
               {search ? `No results for "${search}".` : 'Add your first supplier to get started.'}
             </p>

@@ -53,8 +53,7 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, sub, subColor, 
         </div>
         <div className="min-w-0">
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-0.5 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate"
-            style={{ fontFamily: 'sans-serif' }}>{value}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate">{value}</p>
           {sub && <p className={`text-[11px] font-semibold mt-0.5 ${subColor ?? 'text-gray-400'}`}>{sub}</p>}
         </div>
       </div>
@@ -85,7 +84,7 @@ function CategoryBreakdown({ expenses }) {
   const grand = breakdown.reduce((s, c) => s + c.total, 0);
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm h-full">
-      <h3 className="text-sm font-bold text-gray-900 mb-1" style={{ fontFamily: 'sans-serif' }}>
+      <h3 className="text-sm font-bold text-gray-900 mb-1">
         Breakdown by Category
       </h3>
       <p className="text-xs text-gray-400 mb-5">Where your money goes</p>
@@ -107,7 +106,7 @@ function CategoryBreakdown({ expenses }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-bold text-gray-400">{cat.pct.toFixed(0)}%</span>
-                    <span className="text-xs font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(cat.total)}</span>
+                    <span className="text-xs font-extrabold text-gray-900 tabular-nums">{naira(cat.total)}</span>
                   </div>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -119,7 +118,7 @@ function CategoryBreakdown({ expenses }) {
           })}
           <div className="flex items-center justify-between pt-3 mt-1 border-t border-gray-100">
             <span className="text-xs font-bold text-gray-600">Total</span>
-            <span className="text-sm font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(grand)}</span>
+            <span className="text-sm font-extrabold text-gray-900 tabular-nums">{naira(grand)}</span>
           </div>
         </div>
       )}
@@ -214,7 +213,7 @@ export default function ExpensesPage() {
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
           <div className="lg:col-span-3 bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm">
-            <h3 className="text-sm font-bold text-gray-900 mb-1" style={{ fontFamily: 'sans-serif' }}>Monthly Trend</h3>
+            <h3 className="text-sm font-bold text-gray-900 mb-1">Monthly Trend</h3>
             <p className="text-xs text-gray-400 mb-5">6-month spend overview</p>
             <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={expenseTrend}>
@@ -315,7 +314,7 @@ export default function ExpensesPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Receipt size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2" style={{ fontFamily: 'sans-serif' }}>No expenses found</h3>
+            <h3 className="text-base font-bold text-gray-700 mb-2">No expenses found</h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
               {search ? `No results for "${search}".` : 'Start recording your business expenses.'}
             </p>

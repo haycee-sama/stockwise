@@ -20,8 +20,7 @@ export default function DeleteModal({ isOpen, item, onClose, onConfirm }) {
             <Trash2 size={24} className="text-red-500" />
           </div>
 
-          <h3 className="text-base font-bold text-gray-900 text-center mb-2"
-            style={{ fontFamily: 'sans-serif' }}>
+          <h3 className="text-base font-bold text-gray-900 text-center mb-2">
             Delete Item?
           </h3>
 

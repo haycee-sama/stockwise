@@ -21,8 +21,7 @@ export default function StockDonut() {
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-250">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="text-sm font-bold text-gray-900"
-            style={{ fontFamily: 'sans-serif' }}>
+          <h3 className="text-sm font-bold text-gray-900">
             Stock Status
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">{inStockPct}% availability</p>
@@ -50,8 +49,7 @@ export default function StockDonut() {
 
         {/* Center label */}
         <div className="absolute text-center pointer-events-none">
-          <p className="text-2xl font-extrabold text-gray-900 leading-none"
-            style={{ fontFamily: 'sans-serif' }}>
+          <p className="text-2xl font-extrabold text-gray-900 leading-none">
             {total.toLocaleString()}
           </p>
           <p className="text-[10px] text-gray-400 font-medium mt-0.5">total items</p>

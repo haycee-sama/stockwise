@@ -12,8 +12,7 @@ export default function LowStockTable() {
             <AlertTriangle size={15} className="text-amber-500" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-gray-900"
-              style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-sm font-bold text-gray-900">
               Low Stock Alerts
             </h3>
             <p className="text-[11px] text-gray-400">Items needing restocking</p>
