@@ -131,7 +131,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
               <Users size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 className="text-sm font-bold text-gray-900">
                 {isEditing ? 'Edit Customer' : 'Add Customer'}
               </h2>
               <p className="text-[11px] text-gray-400">
@@ -202,7 +202,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
             {(form.firstName || form.lastName) && (
               <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ background: editCustomer?.color ?? '#dcfce7', color: editCustomer?.textColor ?? '#15803d', fontFamily: 'sans-serif' }}>
+                  style={{ background: editCustomer?.color ?? '#dcfce7', color: editCustomer?.textColor ?? '#15803d' }}>
                   {initials || '??'}
                 </div>
                 <div>

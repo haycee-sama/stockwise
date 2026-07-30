@@ -1,6 +1,6 @@
 // src/components/vendors/VendorModal.jsx
 import { useState, useEffect } from 'react';
-import { X, Truck, Loader2, Plus, Minus } from 'lucide-react';
+import { X, Truck, Loader2, Plus, Minus, CheckCircle } from 'lucide-react';
 import { vendorCategories, vendorAvatarColors } from '../../data/mockData';
 
 function Field({ label, error, children }) {
@@ -138,7 +138,7 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
               <Truck size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 className="text-base font-bold text-gray-900">
                 {isEditing ? 'Edit Vendor' : 'Add New Vendor'}
               </h2>
               <p className="text-xs text-gray-400">
@@ -263,7 +263,9 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
               className="flex-1 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2">
               {saving
                 ? <><Loader2 size={15} className="animate-spin" /> Saving...</>
-                : isEditing ? '✅ Save Changes' : '➕ Add Vendor'
+                : isEditing
+                  ? <><CheckCircle size={15} /> Save Changes</>
+                  : <><Plus size={15} /> Add Vendor</>
               }
             </button>
           </div>

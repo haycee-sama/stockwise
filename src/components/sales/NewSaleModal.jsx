@@ -160,7 +160,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
               <ShoppingCart size={17} className="text-green-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 className="text-sm font-bold text-gray-900">
                 New Sale
               </h2>
               <p className="text-[11px] text-gray-400">
@@ -304,8 +304,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
                     </p>
                     <p className="text-xs text-green-700 font-bold">Subtotal</p>
                   </div>
-                  <p className="text-lg font-extrabold text-green-600 tabular-nums"
-                    style={{ fontFamily: 'sans-serif' }}>
+                  <p className="text-lg font-extrabold text-green-600 tabular-nums">
                     {naira(subtotal)}
                   </p>
                 </div>
@@ -342,8 +341,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
                 </div>
                 <div className="border-t border-gray-200 pt-3 flex items-center justify-between">
                   <span className="text-sm font-bold text-gray-700">Total</span>
-                  <span className="text-xl font-extrabold text-green-600 tabular-nums"
-                    style={{ fontFamily: 'sans-serif' }}>
+                  <span className="text-xl font-extrabold text-green-600 tabular-nums">
                     {naira(subtotal)}
                   </span>
                 </div>

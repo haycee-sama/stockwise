@@ -1,7 +1,14 @@
 // src/components/expenses/ExpenseModal.jsx
 import { useState, useEffect } from 'react';
-import { X, Receipt, Loader2 } from 'lucide-react';
+import {
+  X, Receipt, Loader2, Plus, CheckCircle,
+  Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench,
+  Banknote, Building2, CreditCard,
+} from 'lucide-react';
 import { expenseCategories, expensePaymentMethods, vendorsData } from '../../data/mockData';
+
+const iconMap = { Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench };
+const pmtIcons = { Cash: Banknote, Transfer: Building2, Card: CreditCard };
 
 function Field({ label, error, children }) {
   return (
@@ -99,6 +106,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
 
   // Get the selected category object for preview
   const selectedCat = expenseCategories.find(c => c.id === form.category);
+  const SelectedCatIcon = selectedCat ? (iconMap[selectedCat.icon] ?? Wrench) : null;
 
   // Vendor suggestions from vendorsData
   const vendorSuggestions = vendorsData.map(v => v.name);
@@ -114,7 +122,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
               <Receipt size={17} className="text-red-500" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 className="text-base font-bold text-gray-900">
                 {isEditing ? 'Edit Expense' : 'Add New Expense'}
               </h2>
               <p className="text-xs text-gray-400">
@@ -139,21 +147,25 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
           {/* Category picker — visual grid */}
           <Field label="Category *" error={errors.category}>
             <div className="grid grid-cols-4 gap-2">
-              {expenseCategories.map(cat => (
-                <button key={cat.id} type="button"
-                  onClick={() => { setForm(p => ({ ...p, category: cat.id })); if (errors.category) setErrors(p => ({ ...p, category: '' })); }}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all
-                    ${form.category === cat.id
-                      ? 'border-green-500 bg-green-50 scale-105'
-                      : 'border-gray-200 hover:border-gray-300 bg-white'
-                    }`}>
-                  <span className="text-xl">{cat.emoji}</span>
-                  <span className={`text-[10px] font-bold text-center leading-tight
-                    ${form.category === cat.id ? 'text-green-700' : 'text-gray-500'}`}>
-                    {cat.label}
-                  </span>
-                </button>
-              ))}
+              {expenseCategories.map(cat => {
+                const Icon = iconMap[cat.icon] ?? Wrench;
+                const isActive = form.category === cat.id;
+                return (
+                  <button key={cat.id} type="button"
+                    onClick={() => { setForm(p => ({ ...p, category: cat.id })); if (errors.category) setErrors(p => ({ ...p, category: '' })); }}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all
+                      ${isActive
+                        ? 'border-green-500 bg-green-50 scale-105'
+                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}>
+                    <Icon size={18} className={isActive ? 'text-green-600' : 'text-gray-500'} />
+                    <span className={`text-[10px] font-bold text-center leading-tight
+                      ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
+                      {cat.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </Field>
 
@@ -185,17 +197,18 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
             <Field label="Payment Method">
               <div className="flex gap-2">
                 {expensePaymentMethods.map(method => {
-                  const icons = { Cash: '💵', Transfer: '🏦', Card: '💳' };
+                  const Icon = pmtIcons[method] ?? Banknote;
+                  const isActive = form.payment === method;
                   return (
                     <button key={method} type="button"
                       onClick={() => setForm(p => ({ ...p, payment: method }))}
                       className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all
-                        ${form.payment === method
+                        ${isActive
                           ? 'border-green-500 bg-green-50'
                           : 'border-gray-200 hover:border-gray-300'
                         }`}>
-                      <span className="text-base">{icons[method]}</span>
-                      <span className={`text-[10px] font-bold ${form.payment === method ? 'text-green-700' : 'text-gray-500'}`}>
+                      <Icon size={16} className={isActive ? 'text-green-700' : 'text-gray-500'} />
+                      <span className={`text-[10px] font-bold ${isActive ? 'text-green-700' : 'text-gray-500'}`}>
                         {method}
                       </span>
                     </button>
@@ -218,15 +231,15 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
           {form.name && form.amount && selectedCat && (
             <div className="flex items-center gap-3 rounded-xl p-3 border border-gray-200"
               style={{ background: selectedCat.bg }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                 style={{ background: 'white' }}>
-                {selectedCat.emoji}
+                {SelectedCatIcon && <SelectedCatIcon size={18} style={{ color: selectedCat.color }} />}
               </div>
               <div className="flex-1">
                 <p className="text-sm font-bold text-gray-800">{form.name}</p>
                 <p className="text-xs text-gray-500">{selectedCat.label} · {form.vendor || '—'} · {form.payment}</p>
               </div>
-              <p className="text-base font-extrabold" style={{ color: selectedCat.color, fontFamily: 'sans-serif' }}>
+              <p className="text-base font-extrabold" style={{ color: selectedCat.color }}>
                 ₦{Number(form.amount || 0).toLocaleString()}
               </p>
             </div>
@@ -242,7 +255,9 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
               className="flex-1 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2">
               {saving
                 ? <><Loader2 size={15} className="animate-spin" /> Saving...</>
-                : isEditing ? '✅ Save Changes' : '➕ Add Expense'
+                : isEditing
+                  ? <><CheckCircle size={15} /> Save Changes</>
+                  : <><Plus size={15} /> Add Expense</>
               }
             </button>
           </div>

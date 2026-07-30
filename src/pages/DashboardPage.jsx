@@ -32,7 +32,7 @@ function RecentSaleCard({ order }) {
   return (
     <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5 hover:shadow-md transition-all animate-fade-up">
       <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-        style={{ background: order.customer.color, color: order.customer.textColor, fontFamily: 'sans-serif' }}>
+        style={{ background: order.customer.color, color: order.customer.textColor }}>
         {order.customer.initials}
       </div>
       <div className="flex-1 min-w-0">
@@ -42,8 +42,7 @@ function RecentSaleCard({ order }) {
         </p>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className="text-sm font-extrabold text-gray-900 tabular-nums"
-          style={{ fontFamily: 'sans-serif' }}>
+        <p className="text-sm font-extrabold text-gray-900 tabular-nums">
           {naira(order.total)}
         </p>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md
@@ -70,8 +69,7 @@ function PendingOrderRow({ order, onFulfil }) {
           {order.id} · {order.items} item{order.items > 1 ? 's' : ''}
         </p>
       </div>
-      <p className="text-sm font-extrabold text-gray-900 flex-shrink-0 tabular-nums"
-        style={{ fontFamily: 'sans-serif' }}>
+      <p className="text-sm font-extrabold text-gray-900 flex-shrink-0 tabular-nums">
         {naira(order.amount)}
       </p>
       <button onClick={() => onFulfil(order.id)}
@@ -242,8 +240,7 @@ export default function DashboardPage() {
             <div key={s.label}
               className={`${s.bg} rounded-2xl p-4 text-center animate-fade-up`}
               style={{ animationDelay: `${0.05 + i * 0.05}s` }}>
-              <p className={`text-xl sm:text-2xl font-extrabold ${s.color} tabular-nums`}
-                style={{ fontFamily: 'sans-serif' }}>
+              <p className={`text-xl sm:text-2xl font-extrabold ${s.color} tabular-nums`}>
                 {s.value}
               </p>
               <p className="text-[11px] text-gray-500 font-medium mt-0.5">{s.label}</p>
@@ -342,7 +339,7 @@ export default function DashboardPage() {
                   <BarChart2 size={15} className="text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+                  <h3 className="text-sm font-bold text-gray-900">
                     Recent Sales
                   </h3>
                   <p className="text-[11px] text-gray-400">Latest transactions</p>
@@ -416,7 +413,7 @@ export default function DashboardPage() {
                   <Clock size={15} className="text-orange-500" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+                  <h3 className="text-sm font-bold text-gray-900">
                     Pending Orders
                   </h3>
                   <p className="text-[11px] text-gray-400">
@@ -435,8 +432,7 @@ export default function DashboardPage() {
                 <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
                   <CheckCircle size={22} className="text-gray-400" />
                 </div>
-                <p className="text-sm font-bold text-gray-700 mb-1"
-                  style={{ fontFamily: 'sans-serif' }}>
+                <p className="text-sm font-bold text-gray-700 mb-1">
                   All caught up!
                 </p>
                 <p className="text-xs text-gray-400">No pending orders right now.</p>

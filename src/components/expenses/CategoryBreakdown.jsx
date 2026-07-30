@@ -37,7 +37,7 @@ export default function CategoryBreakdown({ expenses }) {
   return (
     <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm h-full">
       <div className="mb-5">
-        <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+        <h3 className="text-base font-bold text-gray-900">
           Expense Breakdown
         </h3>
         <p className="text-xs text-gray-400 mt-0.5">By category</p>
@@ -64,8 +64,7 @@ export default function CategoryBreakdown({ expenses }) {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-gray-400">{cat.pct.toFixed(1)}%</span>
-                    <span className="text-sm font-extrabold text-gray-900"
-                      style={{ fontFamily: 'sans-serif' }}>
+                    <span className="text-sm font-extrabold text-gray-900">
                       {naira(cat.total)}
                     </span>
                   </div>
@@ -83,8 +82,7 @@ export default function CategoryBreakdown({ expenses }) {
           {/* Total */}
           <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
             <span className="text-sm font-bold text-gray-600">Total Recorded</span>
-            <span className="text-lg font-extrabold text-gray-900"
-              style={{ fontFamily: 'sans-serif' }}>
+            <span className="text-lg font-extrabold text-gray-900">
               {naira(grandTotal)}
             </span>
           </div>

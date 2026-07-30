@@ -22,7 +22,7 @@ export default function ExpenseTrendChart() {
     <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+          <h3 className="text-base font-bold text-gray-900">
             Monthly Trend
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">Last 6 months spend</p>

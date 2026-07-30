@@ -50,7 +50,7 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+          <h2 className="text-sm font-bold text-gray-900">
             Customer Profile
           </h2>
           <div className="flex items-center gap-2">
@@ -72,13 +72,12 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
           <div className="px-5 py-5 border-b border-gray-100">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-extrabold flex-shrink-0"
-                style={{ background: customer.color, color: customer.textColor, fontFamily: 'sans-serif' }}>
+                style={{ background: customer.color, color: customer.textColor }}>
                 {customer.initials}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h3 className="text-base font-extrabold text-gray-900 truncate"
-                    style={{ fontFamily: 'sans-serif' }}>
+                  <h3 className="text-base font-extrabold text-gray-900 truncate">
                     {customer.firstName} {customer.lastName}
                   </h3>
                   <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${sCfg.cls}`}>
@@ -120,8 +119,7 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
               { label: 'Avg. Order',   value: naira(avgOrder),             color: 'text-purple-700', bg: 'bg-purple-50' },
             ].map(s => (
               <div key={s.label} className={`${s.bg} rounded-xl p-3 text-center`}>
-                <p className={`text-sm font-extrabold ${s.color} tabular-nums`}
-                  style={{ fontFamily: 'sans-serif' }}>{s.value}</p>
+                <p className={`text-sm font-extrabold ${s.color} tabular-nums`}>{s.value}</p>
                 <p className="text-[10px] text-gray-500 font-medium mt-0.5">{s.label}</p>
               </div>
             ))}

@@ -38,8 +38,7 @@ export default function TopBar({ title, subtitle, actions }) {
           <div className="flex-1 min-w-0">
             {title ? (
               <>
-                <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate"
-                  style={{ fontFamily: 'sans-serif' }}>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
                   {title}
                 </h1>
                 {subtitle && (
@@ -48,8 +47,7 @@ export default function TopBar({ title, subtitle, actions }) {
               </>
             ) : (
               <>
-                <h1 className="text-lg sm:text-xl font-bold text-gray-900"
-                  style={{ fontFamily: 'sans-serif' }}>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900">
                   {getGreeting()}, {user?.firstName}
                 </h1>
                 <p className="text-xs text-gray-400 hidden sm:block">{today}</p>
@@ -95,8 +93,7 @@ export default function TopBar({ title, subtitle, actions }) {
                   <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
                   <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-up">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-bold text-gray-900"
-                        style={{ fontFamily: 'sans-serif' }}>
+                      <p className="text-sm font-bold text-gray-900">
                         Notifications
                       </p>
                       <span className="text-xs font-semibold text-green-600 cursor-pointer hover:underline">
