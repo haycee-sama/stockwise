@@ -12,6 +12,7 @@ import { Package } from 'lucide-react';
 const LoginPage          = lazy(() => import('./pages/auth/LoginPage'));
 const SignupPage         = lazy(() => import('./pages/auth/SignupPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
+const ResetPasswordPage  = lazy(() => import('./pages/auth/ResetPasswordPage'));
 const DashboardPage     = lazy(() => import('./pages/DashboardPage'));
 const InventoryPage     = lazy(() => import('./pages/InventoryPage'));
 const SalesPage         = lazy(() => import('./pages/SalesPage'));
@@ -95,6 +96,7 @@ function AppRoutes() {
       <Route path="/login"  element={<AuthRoute><Suspense fallback={<PageLoader />}><LoginPage  /></Suspense></AuthRoute>} />
       <Route path="/signup" element={<AuthRoute><Suspense fallback={<PageLoader />}><SignupPage /></Suspense></AuthRoute>} />
       <Route path="/forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPasswordPage /></Suspense>} />
+      <Route path="/reset-password"  element={<Suspense fallback={<PageLoader />}><ResetPasswordPage  /></Suspense>} />
 
       {/* Protected app routes */}
       <Route element={<ProtectedRoute />}>

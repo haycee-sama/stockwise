@@ -13,11 +13,16 @@ dist-ssr
 *.local
 
 # Environment files — never commit real credentials.
-# `.env.example` is the only env file that should be tracked.
+# `.env.example` and `.env.test.local` are the only env files tracked:
+# - `.env.example` documents the required env vars (placeholders).
+# - `.env.test.local` overrides values to empty strings for tests so
+#   the test suite runs deterministically in demo mode regardless of
+#   whether the developer has a .env.local configured.
 .env
 .env.*
 !.env.example
 !.env.example.*
+!.env.test.local
 
 # Supabase local dev artifacts (CLI-generated, may contain local-only secrets)
 supabase/.branches

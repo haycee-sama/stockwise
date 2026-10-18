@@ -51,8 +51,12 @@ export default function ForgotPasswordPage() {
     setSubmitting(true);
     try {
       const { supabase } = await import('../../lib/supabase');
+      // The redirect URL must be in the Supabase dashboard's allowed
+      // Redirect URLs list (Auth → URL Configuration). Uses the
+      // VITE_PUBLIC_APP_URL env var so dev / preview / prod all work.
+      const appUrl = import.meta.env.VITE_PUBLIC_APP_URL ?? window.location.origin;
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${appUrl}/reset-password`,
       });
       if (error) {
         setServerError(error.message ?? 'Failed to send reset email.');

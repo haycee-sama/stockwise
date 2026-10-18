@@ -1,25 +1,20 @@
 // src/services/index.js
-// Data-access layer entry point.
+// Data-access layer entry point. Single switch-point between demo
+// mode (mock) and Supabase mode (real queries against the configured
+// Supabase project).
 //
-// This module is the **single switch-point** between demo mode (mock data
-// from `src/data/mockData.js`) and Supabase mode (real queries against
-// the configured Supabase project).
+// Switch logic:
+// - If `isSupabaseConfigured` is true (both VITE_SUPABASE_URL and
+//   VITE_SUPABASE_PUBLISHABLE_KEY are set), the Supabase-backed
+//   services are used.
+// - Otherwise, the mock services are used and a clearly-labelled
+//   demo-mode banner is shown via DemoModeBanner.
 //
-// Page components should NEVER import from `src/data/mockData.js` directly
-// once this layer is wired up — they should import from `src/services/*`
-// instead. That way, swapping demo → Supabase is a one-line change in
-// `src/services/index.js`, not a 30-file refactor.
-//
-// Current status:
-// - All services return mock data via the `*Mock` imports below.
-// - Each service exposes the same async shape it will have under Supabase
-//   (Promise<{ data, error }>) so callers can be written today and the
-//   implementation can be swapped later without touching call sites.
-// - No Supabase queries are actually executed yet — `supabase` is only
-//   imported for the auth flow (see `src/context/AuthContext.jsx`).
-//
-// See docs/BACKEND_HANDOVER.md for the full API contract list and
-// docs/SUPABASE_SETUP.md for the schema and RLS plan.
+// Note: switching is per-module at import time. The current selected
+// mode is exposed as `dataMode.isSupabase` and `dataMode.writesPersist`
+// so callers can branch their UI without re-checking env.
+
+import { isSupabaseConfigured } from '../lib/env';
 
 import * as inventoryMock from './inventoryMock';
 import * as salesMock     from './salesMock';
@@ -29,22 +24,36 @@ import * as expensesMock  from './expensesMock';
 import * as dashboardMock from './dashboardMock';
 import * as reportsMock   from './reportsMock';
 
-import { isSupabaseConfigured } from '../lib/env';
+import * as inventorySupabase from './inventorySupabase';
+import * as salesSupabase     from './salesSupabase';
+import * as customersSupabase from './customersSupabase';
+import * as vendorsSupabase   from './vendorsSupabase';
+import * as expensesSupabase  from './expensesSupabase';
+import * as dashboardSupabase from './dashboardSupabase';
+import * as reportsSupabase   from './reportsSupabase';
+
+import * as businessesSupabase from './businessesSupabase';
+
+// Businesses service — Supabase-only (no mock equivalent because it
+// only makes sense when the auth user is a real Supabase user with
+// real business memberships). In demo mode, return null/empty.
+export const businessesService = isSupabaseConfigured
+  ? businessesSupabase
+  : {
+      listMyBusinesses: async () => ({ data: [], error: null }),
+      createBusiness:   async () => ({ data: null, error: { code: 'DEMO_MODE', message: 'Demo mode — Supabase not configured' } }),
+      getMyFirstBusinessId: async () => null,
+    };
 
 export const dataMode = Object.freeze({
-  isSupabase: isSupabaseConfigured, // false in demo mode
-  // True when data writes are actually persisted to a backend.
-  // In demo mode, mutations are in-memory only and lost on refresh.
-  writesPersist: false,
+  isSupabase: isSupabaseConfigured,
+  writesPersist: isSupabaseConfigured,
 });
 
-// Each of these delegates to the mock implementation today. When Supabase
-// is wired (after schema + RLS are approved), the imports above will be
-// replaced with `supabase*` equivalents without changing call sites.
-export const inventoryService = inventoryMock;
-export const salesService     = salesMock;
-export const customersService = customersMock;
-export const vendorsService   = vendorsMock;
-export const expensesService  = expensesMock;
-export const dashboardService = dashboardMock;
-export const reportsService   = reportsMock;
+export const inventoryService = isSupabaseConfigured ? inventorySupabase : inventoryMock;
+export const salesService     = isSupabaseConfigured ? salesSupabase     : salesMock;
+export const customersService = isSupabaseConfigured ? customersSupabase : customersMock;
+export const vendorsService   = isSupabaseConfigured ? vendorsSupabase   : vendorsMock;
+export const expensesService  = isSupabaseConfigured ? expensesSupabase  : expensesMock;
+export const dashboardService = isSupabaseConfigured ? dashboardSupabase : dashboardMock;
+export const reportsService   = isSupabaseConfigured ? reportsSupabase   : reportsMock;
