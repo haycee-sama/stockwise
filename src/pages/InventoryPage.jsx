@@ -1,5 +1,5 @@
 // src/pages/InventoryPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Search, Upload, Plus, Edit2, Trash2,
   ArrowUpDown, ChevronDown, Download,
@@ -11,7 +11,10 @@ import TopBar     from '../components/layout/TopBar';
 import ItemModal  from '../components/inventory/ItemModal';
 import DeleteModal from '../components/inventory/DeleteModal';
 import { ItemIcon } from '../utils/inventoryIcons';
-import { inventoryItems as initialItems, categories } from '../data/mockData';
+import { inventoryService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import { categories as staticCategories } from '../data/mockData';
 
 // ── Helpers ──────────────────────────────────────
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
@@ -162,7 +165,10 @@ function SortTh({ col, label, sortBy, onSort }) {
 
 // ── Main Page ─────────────────────────────────────
 export default function InventoryPage() {
-  const [items, setItems]           = useState(initialItems);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [items, setItems]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [activeCategory, setCategory] = useState('All');
   const [statusFilter, setStatus]   = useState('All');
@@ -174,6 +180,39 @@ export default function InventoryPage() {
   const [deleteModal, setDeleteModal] = useState({ open: false, item: null });
   const [selected, setSelected]     = useState(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  // ── Fetch inventory via the service layer ─────
+  // Demo mode returns mock data; Supabase mode returns real DB rows
+  // scoped by RLS to the active business. Errors are surfaced, NOT
+  // silently falling back to mock data.
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await inventoryService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setItems([]);
+      } else {
+        setItems(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  // Re-fetch the full list when leaving the demo mode banner
+  // (covers refresh after the user logs in fresh).
+  // Note: the `isDemoMode` check is here for completeness; the
+  // activeBusinessId dep above already re-fetches when auth state
+  // changes via BusinessProvider.
 
   // ── Stats ─────────────────────────────────────
   const stats = useMemo(() => ({
@@ -216,16 +255,40 @@ export default function InventoryPage() {
   const openEdit = useCallback((item) => { setEditItem(item); setModalOpen(true); }, []);
   const openDel  = useCallback((item) => setDeleteModal({ open: true, item }), []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    // Call the service first. The service handles the create-vs-update
+    // decision based on whether `saved.id` already exists.
+    // In demo mode, the mock service mutates its internal array + returns
+    // the saved row. In Supabase mode, the service writes via the
+    // sw_create_business RPC + RLS-enforced INSERT/UPDATE.
+    const isExisting = items.some(i => String(i.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await inventoryService.update(saved.id, payload)
+      : await inventoryService.create(payload);
+    if (svcErr) {
+      // Surface the error — do NOT silently fall back to mock data.
+      // The modal stays open + the user sees a toast / inline error.
+      console.error('[InventoryPage] save failed:', svcErr);
+      // TODO: surface a toast. For now, alert is too aggressive; we
+      // leave the modal open. The user can retry.
+      return;
+    }
+    // Update local state from the service response.
     setItems(prev =>
-      prev.some(i => i.id === saved.id)
-        ? prev.map(i => i.id === saved.id ? saved : i)
-        : [...prev, saved]
+      prev.some(i => String(i.id) === String(persisted.id))
+        ? prev.map(i => String(i.id) === String(persisted.id) ? persisted : i)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [items, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setItems(prev => prev.filter(i => i.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await inventoryService.remove(id);
+    if (svcErr) {
+      console.error('[InventoryPage] delete failed:', svcErr);
+      return;
+    }
+    setItems(prev => prev.filter(i => String(i.id) !== String(id)));
     setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
   }, []);
 
@@ -269,12 +332,25 @@ export default function InventoryPage() {
     <div className="flex-1 flex flex-col min-h-screen bg-gray-50 overflow-y-auto page-content">
       <TopBar
         title="Inventory"
-        subtitle={`${items.length} items · ${categories.length - 1} categories`}
+        subtitle={`${items.length} items · ${staticCategories.length - 1} categories`}
         actions={headerActions}
       />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading inventory…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchItems} />
+        )}
+
+        {!loading && !error && (
+          <>
         {/* ── Stat Cards ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <MiniStat icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600"
@@ -294,7 +370,7 @@ export default function InventoryPage() {
 
         {/* ── Category Tabs ── */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {categories.map(cat => {
+          {staticCategories.map(cat => {
             const count = cat === 'All' ? items.length : items.filter(i => i.category === cat).length;
             return (
               <button key={cat} onClick={() => setCategory(cat)}
@@ -585,6 +661,8 @@ export default function InventoryPage() {
               </strong>
             </span>
           </div>
+        )}
+          </>
         )}
       </main>
 
