@@ -129,8 +129,14 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
     }
     setSaving(true);
     try {
-      await new Promise(r => setTimeout(r, 800));
-      onSave({
+      // Pass the order payload to onSave. In Supabase mode, the parent's
+      // handleNewSale calls the atomic sw_create_sale RPC. The parent
+      // returns { success: boolean, message?: string } so the modal
+      // knows whether to close or show an error.
+      const payload = {
+        // Note: the parent now ignores the locally-generated `id` and
+        // `date` — the server generates the real display_id (ORD-XXXX)
+        // and sale_date atomically via the sw_create_sale RPC.
         id: `ORD-${String(Math.floor(Math.random() * 9000) + 1000)}`,
         customer: {
           name:      customer,
@@ -144,8 +150,19 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
         status:  'completed',
         date:    new Date().toISOString(),
         note,
-      });
+      };
+      // onSave may be sync (legacy) or async (Phase 3B). Use Promise.resolve
+      // to handle both shapes.
+      const result = await Promise.resolve(onSave(payload));
+      if (result && result.success === false) {
+        // Server rejected — show the error in the modal + stay open.
+        setErrors(prev => ({ ...prev, submit: result.message ?? 'Could not create sale.' }));
+        return;
+      }
       clearCartState();
+    } catch (e) {
+      setErrors(prev => ({ ...prev, submit: e?.message ?? 'Network error.' }));
+      return;
     } finally {
       setSaving(false);
     }
@@ -415,6 +432,12 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
               </div>
 
               {/* Action buttons */}
+              {errors.submit && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-red-700 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-red-100 flex items-center justify-center text-[8px] font-bold flex-shrink-0 mt-0.5">!</span>
+                  <span className="flex-1 break-words">{errors.submit}</span>
+                </div>
+              )}
               <div className="flex gap-3">
                 <button onClick={() => setStep(1)}
                   className="flex items-center gap-2 flex-1 justify-center py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all">
