@@ -55,13 +55,6 @@ create table if not exists sw_businesses (
   deleted_at      timestamptz
 );
 
-create index if not exists sw_businesses_active_idx on sw_businesses(created_at desc) where deleted_at is null;
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_business_memberships — join table: which auth users belong to
--- which businesses, and in what role. This is what enables business
--- isolation via RLS without needing to trust the client.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_business_memberships (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        not null references sw_businesses(id) on delete cascade,
@@ -75,28 +68,6 @@ create table if not exists sw_business_memberships (
   unique (business_id, user_id)
 );
 
-create index if not exists sw_business_memberships_user_idx    on sw_business_memberships(user_id);
-create index if not exists sw_business_memberships_business_idx on sw_business_memberships(business_id);
-
--- ──────────────────────────────────────────────────────────────────────────
--- Helper: current_user_sw_business_ids()
--- Returns the set of business_id UUIDs the current auth user is a
--- member of. Used by every RLS policy. SECURITY DEFINER so anon role
--- can call it; the function only reads from sw_business_memberships.
--- ──────────────────────────────────────────────────────────────────────────
-create or replace function public.current_user_sw_business_ids()
-returns setof uuid
-language sql
-stable
-security definer
-set search_path = public, auth
-as $$
-  select business_id from public.sw_business_memberships where user_id = auth.uid();
-$$;
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_customers  — a business's customer list.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_customers (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        not null references sw_businesses(id) on delete restrict,
@@ -113,17 +84,6 @@ create table if not exists sw_customers (
   deleted_at      timestamptz
 );
 
-create index if not exists sw_customers_business_idx       on sw_customers(business_id) where deleted_at is null;
-create index if not exists sw_customers_business_status_idx on sw_customers(business_id, status) where deleted_at is null;
-create index if not exists sw_customers_business_type_idx   on sw_customers(business_id, type) where deleted_at is null;
-create index if not exists sw_customers_business_name_lower_idx on sw_customers(business_id, lower(first_name || ' ' || last_name))
-  where deleted_at is null;
-create unique index if not exists sw_customers_business_email_unique
-  on sw_customers(business_id, lower(email)) where deleted_at is null and email is not null;
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_vendors  — a business's supplier list.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_vendors (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        not null references sw_businesses(id) on delete restrict,
@@ -142,15 +102,6 @@ create table if not exists sw_vendors (
   deleted_at      timestamptz
 );
 
-create index if not exists sw_vendors_business_idx        on sw_vendors(business_id) where deleted_at is null;
-create index if not exists sw_vendors_business_category_idx on sw_vendors(business_id, category) where deleted_at is null;
-create index if not exists sw_vendors_business_status_idx on sw_vendors(business_id, status) where deleted_at is null;
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_inventory_items  — products the business sells.
--- `supplier_id` is a FK to sw_vendors(id), nullable for items without
--- a known supplier.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_inventory_items (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        not null references sw_businesses(id) on delete restrict,
@@ -169,19 +120,6 @@ create table if not exists sw_inventory_items (
   deleted_at      timestamptz
 );
 
-create unique index if not exists sw_inventory_items_business_sku_unique
-  on sw_inventory_items(business_id, lower(sku)) where deleted_at is null;
-create index if not exists sw_inventory_items_business_idx       on sw_inventory_items(business_id) where deleted_at is null;
-create index if not exists sw_inventory_items_business_category_idx on sw_inventory_items(business_id, category) where deleted_at is null;
-create index if not exists sw_inventory_items_business_stock_idx on sw_inventory_items(business_id, stock) where deleted_at is null and stock <= threshold;
-
--- ──────────────────────────────────────────────────────────────────────────
--- Per-business counter table for display_id generation.
--- `display_id` (e.g. ORD-0342, PO-0024) is generated atomically via
--- this counter. The counter is incremented under an advisory lock so
--- concurrent inserts in the same business get unique, monotonic
--- numbers. See the `next_display_id()` function in migration 0002.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_display_id_counters (
   business_id     uuid        not null references sw_businesses(id) on delete cascade,
   entity          text        not null check (entity in ('sale', 'purchase_order')),
@@ -190,9 +128,6 @@ create table if not exists sw_display_id_counters (
   primary key (business_id, entity)
 );
 
--- ──────────────────────────────────────────────────────────────────────────
--- sw_sales  — header record for a customer sale.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_sales (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        not null references sw_businesses(id) on delete restrict,
@@ -208,16 +143,6 @@ create table if not exists sw_sales (
   deleted_at      timestamptz
 );
 
-create unique index if not exists sw_sales_business_display_id_unique
-  on sw_sales(business_id, display_id) where deleted_at is null;
-create index if not exists sw_sales_business_idx        on sw_sales(business_id) where deleted_at is null;
-create index if not exists sw_sales_business_status_idx on sw_sales(business_id, status) where deleted_at is null;
-create index if not exists sw_sales_business_date_idx   on sw_sales(business_id, sale_date desc) where deleted_at is null;
-create index if not exists sw_sales_business_customer_idx on sw_sales(business_id, customer_id) where deleted_at is null;
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_sale_items — one row per item in a sale.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_sale_items (
   id              uuid        primary key default gen_random_uuid(),
   sale_id         uuid        not null references sw_sales(id) on delete cascade,
@@ -229,35 +154,6 @@ create table if not exists sw_sale_items (
   created_at      timestamptz not null default now()
 );
 
-create index if not exists sw_sale_items_sale_idx  on sw_sale_items(sale_id);
-create index if not exists sw_sale_items_item_idx on sw_sale_items(item_id);
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_stock_movements — ledger of every stock increment/decrement.
--- DECISION: ledger approach for reproducibility. `stock` column on
--- sw_inventory_items is the current value; this table is the audit
--- trail. Writes happen ONLY via SECURITY DEFINER RPC functions (see
--- migration 0002) — the API does not let clients write to this table
--- directly. A malicious client cannot fake a stock movement.
--- ──────────────────────────────────────────────────────────────────────────
-create table if not exists sw_stock_movements (
-  id              uuid        primary key default gen_random_uuid(),
-  business_id     uuid        not null references sw_businesses(id) on delete cascade,
-  item_id         uuid        not null references sw_inventory_items(id) on delete restrict,
-  kind            text        not null check (kind in ('sale', 'restock', 'adjustment', 'return')),
-  qty             integer     not null, -- negative for outbound, positive for inbound
-  sale_id         uuid        references sw_sales(id) on delete set null,
-  purchase_order_id uuid      references sw_purchase_orders(id) on delete set null,
-  note            text,
-  created_at      timestamptz not null default now(),
-  created_by       uuid        references auth.users(id) on delete set null
-);
-
-create index if not exists sw_stock_movements_business_item_idx on sw_stock_movements(business_id, item_id, created_at desc);
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_purchase_orders — orders placed to vendors for restocking.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_purchase_orders (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        not null references sw_businesses(id) on delete restrict,
@@ -272,16 +168,6 @@ create table if not exists sw_purchase_orders (
   deleted_at      timestamptz
 );
 
-create unique index if not exists sw_purchase_orders_business_display_id_unique
-  on sw_purchase_orders(business_id, display_id) where deleted_at is null;
-create index if not exists sw_purchase_orders_business_idx     on sw_purchase_orders(business_id) where deleted_at is null;
-create index if not exists sw_purchase_orders_business_vendor_idx on sw_purchase_orders(business_id, vendor_id) where deleted_at is null;
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_purchase_order_items — line items on a purchase order.
--- `item_name` is free-text (not FK to inventory_items) because POs
--- often reference items that don't yet exist in inventory.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_purchase_order_items (
   id              uuid        primary key default gen_random_uuid(),
   purchase_order_id uuid       not null references sw_purchase_orders(id) on delete cascade,
@@ -292,11 +178,19 @@ create table if not exists sw_purchase_order_items (
   created_at      timestamptz not null default now()
 );
 
-create index if not exists sw_purchase_order_items_po_idx on sw_purchase_order_items(purchase_order_id);
+create table if not exists sw_stock_movements (
+  id              uuid        primary key default gen_random_uuid(),
+  business_id     uuid        not null references sw_businesses(id) on delete cascade,
+  item_id         uuid        not null references sw_inventory_items(id) on delete restrict,
+  kind            text        not null check (kind in ('sale', 'restock', 'adjustment', 'return')),
+  qty             integer     not null, -- negative for outbound, positive for inbound
+  sale_id         uuid        references sw_sales(id) on delete set null,
+  purchase_order_id uuid      references sw_purchase_orders(id) on delete set null,
+  note            text,
+  created_at      timestamptz not null default now(),
+  created_by       uuid        references auth.users(id) on delete set null
+);
 
--- ──────────────────────────────────────────────────────────────────────────
--- sw_expenses — money the business pays out.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_expenses (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        not null references sw_businesses(id) on delete restrict,
@@ -312,14 +206,6 @@ create table if not exists sw_expenses (
   deleted_at      timestamptz
 );
 
-create index if not exists sw_expenses_business_idx       on sw_expenses(business_id) where deleted_at is null;
-create index if not exists sw_expenses_business_category_idx on sw_expenses(business_id, category) where deleted_at is null;
-create index if not exists sw_expenses_business_date_idx   on sw_expenses(business_id, expense_date desc) where deleted_at is null;
-
--- ──────────────────────────────────────────────────────────────────────────
--- sw_audit_log — who-did-what-when, for every write. Especially
--- important for financial records.
--- ──────────────────────────────────────────────────────────────────────────
 create table if not exists sw_audit_log (
   id              uuid        primary key default gen_random_uuid(),
   business_id     uuid        references sw_businesses(id) on delete cascade,

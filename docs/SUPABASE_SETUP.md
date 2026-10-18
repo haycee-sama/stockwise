@@ -55,6 +55,44 @@
 key, and I will not request the service_role key in chat (it would
 be a critical security exposure).
 
+### Step 0 (optional, recommended) — Drop the existing schema
+
+The dev Supabase project currently has leftover tables from a
+previous experiment (`profiles`, `addresses`, `orders`,
+`order_items`, `user_roles`, `discounts`, `admin_audit_logs`,
+`inventory_reservation_items`). The Stockwise migrations use the
+`sw_` prefix so they coexist cleanly, but a clean slate is simpler
+to reason about.
+
+The user explicitly authorised this drop on 2026-10-18:
+> "i want to drop the tables before running this migrations"
+
+To drop the existing schema:
+
+1. Open https://supabase.com/dashboard/project/yvphrgfxqdjaokaydkyw/sql/new
+2. Open `supabase/migrations/0000_optional_drop_existing_schema.sql`
+   from this repo. Copy. Paste. Run.
+3. Verify success — the editor should show "Success."
+4. Run the verification query:
+   ```sql
+   select tablename from pg_tables where schemaname = 'public';
+   -- Expected: 0 rows.
+   ```
+
+What this drop script does (all `IF EXISTS CASCADE`):
+- Drops the `on_auth_user_created` trigger on `auth.users` (so the
+  previous schema's `handle_new_user` function isn't called after
+  we drop the `profiles` table).
+- Dynamically drops EVERY table in `public` schema.
+- Dynamically drops EVERY function + procedure in `public` schema.
+- Drops every view, sequence, and enum type in `public` schema.
+
+What it does NOT drop:
+- `auth.users` (Supabase Auth's user table — existing signed-up users
+  are preserved. To wipe users, use the dashboard).
+- `storage.*` (Supabase Storage buckets/objects).
+- `_realtime.*`, `graphql_*`, `pg_*`, `extensions.*` schemas.
+
 ### Step 1 — Open the Supabase Dashboard SQL Editor
 
 Go to: https://supabase.com/dashboard/project/yvphrgfxqdjaokaydkyw/sql/new
