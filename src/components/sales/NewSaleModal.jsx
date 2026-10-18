@@ -1,12 +1,13 @@
 // src/components/sales/NewSaleModal.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   X, Plus, Minus, Trash2, ShoppingCart,
   Loader2, Search, User, Banknote,
   Building2, CreditCard, ChevronRight,
   Package, CheckCircle, ArrowLeft,
 } from 'lucide-react';
-import { inventoryItems } from '../../data/mockData';
+import { inventoryService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
 import { ItemIcon } from '../../utils/inventoryIcons';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
@@ -53,6 +54,7 @@ function CartItem({ item, onUpdateQty, onRemove }) {
 
 export default function NewSaleModal({ isOpen, onClose, onSave }) {
   // ── All hooks called unconditionally at the top (Rules of Hooks) ──
+  const { activeBusinessId } = useBusiness();
   const [cart, setCart]         = useState([]);
   const [search, setSearch]     = useState('');
   const [customer, setCustomer] = useState('');
@@ -62,6 +64,17 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   const [saving, setSaving]     = useState(false);
   const [step, setStep]         = useState(1); // 1=items, 2=payment
 
+  // Fetch inventory items via the service layer (replaces mockData import).
+  const [inventoryItems, setInventoryItems] = useState([]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await inventoryService.list({ businessId: activeBusinessId ?? undefined });
+      if (active && data) setInventoryItems(data);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
   const filteredInventory = useMemo(() => {
     const q = search.toLowerCase();
     return inventoryItems.filter(i =>
@@ -70,7 +83,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
         i.sku.toLowerCase().includes(q)
       )
     );
-  }, [search]);
+  }, [search, inventoryItems]);
 
   const clearCartState = useCallback(() => {
     setCart([]); setCustomer(''); setPayment('Cash');
@@ -103,7 +116,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
     setCart(prev =>
       prev.map(c => c.id === id ? { ...c, qty: Math.min(qty, item.stock) } : c)
     );
-  }, [removeFromCart]);
+  }, [removeFromCart, inventoryItems]);
 
   const subtotal = cart.reduce((s, c) => s + c.sellingPrice * c.qty, 0);
   const totalItems = cart.reduce((s, c) => s + c.qty, 0);
@@ -144,7 +157,12 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
           color:     '#f0fdf4',
           textColor: '#15803d',
         },
-        items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.sellingPrice })),
+        items: cart.map(c => ({
+          itemId:     c.id,
+          name:       c.name,
+          qty:        c.qty,
+          unitPrice:  c.sellingPrice,
+        })),
         total:   subtotal,
         payment,
         status:  'completed',

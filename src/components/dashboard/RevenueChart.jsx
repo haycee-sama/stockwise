@@ -1,10 +1,12 @@
 // src/components/dashboard/RevenueChart.jsx
-import { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { revenueData } from '../../data/mockData';
+import { revenueData as fallbackData } from '../../data/mockData';
+import { dashboardService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
+import { useState, useEffect } from 'react';
 import { TrendingUp } from 'lucide-react';
 
 function CustomTooltip({ active, payload, label }) {
@@ -27,10 +29,21 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function RevenueChart() {
+  const { activeBusinessId } = useBusiness();
   const [period, setPeriod] = useState('week');
+  const [data, setData] = useState(fallbackData);
 
-  const total     = revenueData.reduce((s, d) => s + d.thisWeek, 0);
-  const lastTotal = revenueData.reduce((s, d) => s + d.lastWeek, 0);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data: svcData } = await dashboardService.revenue({ businessId: activeBusinessId });
+      if (active && svcData?.data) setData(svcData.data);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  const total     = data.reduce((s, d) => s + d.thisWeek, 0);
+  const lastTotal = data.reduce((s, d) => s + d.lastWeek, 0);
   const growth    = (((total - lastTotal) / lastTotal) * 100).toFixed(1);
 
   return (
@@ -66,7 +79,7 @@ export default function RevenueChart() {
 
       {/* Chart */}
       <ResponsiveContainer width="100%" height={190}>
-        <BarChart data={revenueData} barGap={3} barCategoryGap="28%">
+        <BarChart data={data} barGap={3} barCategoryGap="28%">
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
           <XAxis dataKey="day" axisLine={false} tickLine={false}
             tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} />

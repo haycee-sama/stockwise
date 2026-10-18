@@ -65,25 +65,35 @@ export function BusinessProvider({ children }) {
   // logic local + simple.
   useEffect(() => {
     if (!user) {
-      // Defer the reset to avoid set-state-in-effect cascading-render
-      // warning. The reset is unconditional + idempotent.
-      Promise.resolve().then(() => {
-        setActiveBusinessId(null);
-        setBusinesses([]);
-        setBusinessError(null);
-        setIsBusinessLoading(false);
-      });
+      // Per-line disable: the set-state-in-effect rule flags cascading
+      // renders, but these resets are unconditional + idempotent — they
+      // don't cascade. The Promise.resolve().then() deferral that was
+      // here caused a RACE CONDITION: if the user auth state changed
+      // rapidly (e.g. during session restore), the deferred state
+      // updates from the null-user branch could overwrite the
+      // Supabase branch's updates.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveBusinessId(null);
+       
+      setBusinesses([]);
+       
+      setBusinessError(null);
+       
+      setIsBusinessLoading(false);
       lastSeenUserIdRef.current = null;
       return;
     }
 
     if (isDemoMode) {
-      Promise.resolve().then(() => {
-        setActiveBusinessId(DEMO_BUSINESS_ID);
-        setBusinesses([{ id: DEMO_BUSINESS_ID, name: user.businessName ?? 'My Store', role: 'owner' }]);
-        setIsBusinessLoading(false);
-        setBusinessError(null);
-      });
+      // Same fix as the null-user branch — no deferral.
+       
+      setActiveBusinessId(DEMO_BUSINESS_ID);
+       
+      setBusinesses([{ id: DEMO_BUSINESS_ID, name: user.businessName ?? 'My Store', role: 'owner' }]);
+       
+      setIsBusinessLoading(false);
+       
+      setBusinessError(null);
       lastSeenUserIdRef.current = user.id;
       return;
     }
@@ -100,10 +110,10 @@ export function BusinessProvider({ children }) {
     // below are deferred via a microtask to avoid the cascading-render
     // lint warning too — they're idempotent + safe to defer.
     let active = true;
-    Promise.resolve().then(() => {
-      setIsBusinessLoading(true);
-      setBusinessError(null);
-    });
+     
+    setIsBusinessLoading(true);
+     
+    setBusinessError(null);
 
     (async () => {
       // Avoid duplicate provisioning if the effect fires twice for

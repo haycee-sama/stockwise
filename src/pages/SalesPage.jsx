@@ -255,7 +255,12 @@ export default function SalesPage() {
     const payload = {
       businessId: activeBusinessId,
       customerName: order.customer?.name,
-      items: order.items.map(i => ({ name: i.name, qty: i.qty, unitPrice: i.price })),
+      items: order.items.map(i => ({
+        itemId:    i.itemId,
+        name:      i.name,
+        qty:       i.qty,
+        unitPrice: i.unitPrice,
+      })),
       payment: order.payment,
       status: order.status ?? 'completed',
       note: order.note,

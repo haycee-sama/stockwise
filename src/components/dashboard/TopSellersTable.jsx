@@ -1,6 +1,9 @@
 // src/components/dashboard/TopSellersTable.jsx
 import { ArrowRight, TrendingUp, TrendingDown, ShoppingBag } from 'lucide-react';
-import { topSellers } from '../../data/mockData';
+import { topSellers as fallbackData } from '../../data/mockData';
+import { dashboardService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
+import { useState, useEffect } from 'react';
 import { ItemIcon } from '../../utils/inventoryIcons';
 
 function formatNaira(v) {
@@ -12,7 +15,20 @@ function formatNaira(v) {
 const rankColors = ['text-amber-500', 'text-gray-400', 'text-orange-400'];
 
 export default function TopSellersTable() {
+  const { activeBusinessId } = useBusiness();
+  const [items, setItems] = useState(fallbackData);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data: svcData } = await dashboardService.topSellersList({ businessId: activeBusinessId });
+      if (active && svcData && svcData.length > 0) setItems(svcData);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
   return (
+    // use `items` instead of `topSellers`
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-300">
       {/* Header */}
       <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100">
@@ -45,7 +61,7 @@ export default function TopSellersTable() {
             </tr>
           </thead>
           <tbody>
-            {topSellers.map((item, i) => (
+            {items.map((item, i) => (
               <tr key={item.id}
                 className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors group">
                 {/* Rank */}
