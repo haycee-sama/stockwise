@@ -1,5 +1,5 @@
 // src/pages/DashboardPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DollarSign, TrendingUp, Package, AlertCircle,
@@ -15,7 +15,9 @@ import TopSellersTable from '../components/dashboard/TopSellersTable';
 import LowStockTable   from '../components/dashboard/LowStockTable';
 import DemoModeBanner  from '../components/common/DemoModeBanner';
 import { useAuth }     from '../context/useAuth';
-import { dashboardStats, pendingOrders, salesData, inventoryItems } from '../data/mockData';
+import { dashboardService } from '../services';
+import { dashboardStats as fallbackStats, pendingOrders, salesData, inventoryItems } from '../data/mockData';
+import { useBusiness } from '../context/useBusiness';
 
 // ── Helpers ──────────────────────────────────────
 const naira = (v) => {
@@ -88,6 +90,22 @@ function PendingOrderRow({ order, onFulfil }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { isDemoMode } = useAuth();
+  const { activeBusinessId } = useBusiness();
+  const [summaryStats, setSummaryStats] = useState(null);
+
+  // Fetch live dashboard summary from the service. Falls back to the
+  // mock `dashboardStats` while loading or on error (so the page
+  // doesn't blank out during the fetch). In Supabase mode, the
+  // summary is computed by the dashboardService.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data, error } = await dashboardService.summary({ businessId: activeBusinessId });
+      if (!active) return;
+      if (!error && data) setSummaryStats(data);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
   const [orders, setOrders]       = useState(pendingOrders);
   const [showFilters, setFilters] = useState(false);
   const [period, setPeriod]       = useState('today');
@@ -244,9 +262,9 @@ export default function DashboardPage() {
             icon={DollarSign}
             iconBg="bg-green-100" iconColor="text-green-600"
             label="Total Gross Sales"
-            value={dashboardStats.totalSales}
+            value={(summaryStats ?? fallbackStats).totalSales}
             valueType="currency"
-            change={dashboardStats.salesChange}
+            change={(summaryStats ?? fallbackStats).salesChange}
             changeLabel="vs last month"
             animDelay="0.05s"
           />
@@ -254,9 +272,9 @@ export default function DashboardPage() {
             icon={TrendingUp}
             iconBg="bg-blue-100" iconColor="text-blue-600"
             label="Net Profit"
-            value={dashboardStats.totalProfit}
+            value={(summaryStats ?? fallbackStats).totalProfit}
             valueType="currency"
-            change={dashboardStats.profitChange}
+            change={(summaryStats ?? fallbackStats).profitChange}
             changeLabel="vs last month"
             animDelay="0.10s"
           />
@@ -264,9 +282,9 @@ export default function DashboardPage() {
             icon={Package}
             iconBg="bg-purple-100" iconColor="text-purple-600"
             label="Inventory Items"
-            value={dashboardStats.totalInventory}
+            value={(summaryStats ?? fallbackStats).totalInventory}
             valueType="number"
-            change={dashboardStats.inventoryChange}
+            change={(summaryStats ?? fallbackStats).inventoryChange}
             changeLabel="vs last month"
             animDelay="0.15s"
           />
@@ -274,9 +292,9 @@ export default function DashboardPage() {
             icon={AlertCircle}
             iconBg="bg-red-100" iconColor="text-red-500"
             label="Low Stock Alerts"
-            value={dashboardStats.lowStockCount}
+            value={(summaryStats ?? fallbackStats).lowStockCount}
             valueType="number"
-            change={dashboardStats.lowStockChange}
+            change={(summaryStats ?? fallbackStats).lowStockChange}
             changeLabel="new this week"
             animDelay="0.20s"
           />
