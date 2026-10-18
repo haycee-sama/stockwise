@@ -1,87 +1,152 @@
 # Stockwise — Supabase Setup
 
-> **Status**: PROPOSED. The SQL in `supabase/migrations/` has NOT been
-> applied to any database. The frontend changes in this PR are safe
-> to merge regardless of whether a Supabase project is configured —
-> the app runs in demo mode when `VITE_SUPABASE_URL` /
-> `VITE_SUPABASE_PUBLISHABLE_KEY` are absent.
->
-> This document is the single source of truth for the backend engineer
-> who will eventually wire Supabase. It is also the document the
-> frontend engineer will use to verify demo-mode behaviour locally.
+> **Phase 3A status**: PROPOSED migrations have been refined (now use
+> `sw_` prefix to coexist with the existing dev project schema). The
+> Supabase-backed service modules are written and committed. The
+> frontend's `services/index.js` switches automatically based on
+> `isSupabaseConfigured`. **The SQL migrations are NOT YET APPLIED
+> to the dev project** — see §3 below for the manual application
+> steps the user needs to run.
 
-## 1. What is implemented
+## 1. What is implemented (Phase 3A)
 
-| Area                           | Status            | Notes                                                                                                          |
-| ------------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| `.env.example`                 | ✅ committed      | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` placeholders. See `docs/ENVIRONMENT_SETUP.md` §6.          |
-| `.env.local` gitignored        | ✅ committed      | `.gitignore` explicitly excludes `.env` and `.env.*` (except `.env.example`).                                  |
-| `src/lib/env.js`               | ✅ committed      | Typed access to Vite env vars. `isSupabaseConfigured` is the single source of truth for "demo vs. real" mode.    |
-| `src/lib/supabase.js`          | ✅ committed      | Singleton Supabase client. Returns `null` in demo mode (does NOT throw).                                       |
-| `src/context/AuthContext.jsx`  | ✅ refactored     | Dual-mode: Supabase mode uses `supabase.auth.*` + `onAuthStateChange`; demo mode persists to localStorage.      |
-| `src/context/useAuth.js`       | ✅ created        | `useAuth` hook split out so `AuthContext.jsx` only exports the `AuthProvider` component (lint compliance).     |
-| `src/context/auth-context-instance.js` | ✅ created | Bare `AuthContext` context object, in a file with no components (lint compliance).                          |
-| `src/services/`               | ✅ created        | 7 mock-service modules + an `index.js` that is the single switch-point for demo → Supabase. See §4.           |
-| `src/components/common/ErrorBoundary.jsx` | ✅ created | Wraps lazy pages so a crash in one page does not blank the app.                                                |
-| `src/components/common/ComingSoon.jsx`   | ✅ created | Placeholder for `/settings`, `/documents`, `/forgot-password`.                                                |
-| `src/components/common/DemoModeBanner.jsx` | ✅ created | Honest banner shown on protected pages in demo mode.                                                          |
-| `supabase/migrations/0001_init_schema.sql` | ⚠️ proposed | NOT applied. Schema derived from `src/data/mockData.js` + audit open questions.                              |
-| `supabase/migrations/0002_rls_policies.sql` | ⚠️ proposed | NOT applied. RLS policies enforce multi-tenant isolation (the primary security boundary).                    |
-| Vitest smoke tests              | ✅ created        | 18 tests across `NewSaleModal`, `AuthContext`, `ForgotPasswordPage`, `ComingSoon`, `supabase`. All pass.      |
+| Area                                | Status           | Notes                                                                                                            |
+| ----------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `.env.example`                     | ✅ committed     | Includes `VITE_PUBLIC_APP_URL` for password-reset redirect URLs.                                                |
+| `.env.local` (real values)         | ✅ created locally, gitignored | Contains the actual dev project URL + anon key + production redirect URL. NEVER committed. |
+| `.env.test.local`                  | ✅ committed     | Overrides env to empty strings so tests run deterministically in demo mode regardless of `.env.local`. |
+| `src/lib/env.js`                   | ✅ committed     | Typed env access. `isSupabaseConfigured` is the single switch.                                                  |
+| `src/lib/supabase.js`              | ✅ committed     | Singleton Supabase client. Returns null in demo mode (does NOT throw).                                          |
+| `@supabase/supabase-js` v2.118     | ✅ installed     | Public npm package.                                                                                              |
+| `src/context/AuthContext.jsx`     | ✅ dual-mode     | Supabase mode uses `getSession()` + `onAuthStateChange`; demo mode persists to localStorage.                     |
+| `src/context/useAuth.js`           | ✅ committed     | `useAuth` hook split out for lint compliance.                                                                    |
+| `src/context/auth-context-instance.js` | ✅ committed | Bare context object in a non-component file.                                                                     |
+| `src/services/*Mock.js`            | ✅ committed     | 7 mock modules for demo mode.                                                                                    |
+| `src/services/*Supabase.js`        | ✅ committed     | 7 Supabase-backed modules + `businessesSupabase.js`. Each returns `{ data, error, pagination }` shape. |
+| `src/services/index.js`            | ✅ committed     | Switch-point: `isSupabaseConfigured ? supabase : mock`.                                                          |
+| `src/services/businessesSupabase.js` | ✅ committed   | `listMyBusinesses()`, `createBusiness()`, `getMyFirstBusinessId()`.                                              |
+| `src/pages/auth/ResetPasswordPage.jsx` | ✅ committed  | The link target for `resetPasswordForEmail`. Handles invalid/expired tokens, success state, redirect to /login. |
+| `src/App.jsx`                      | ✅ updated       | Routes `/reset-password` publicly.                                                                               |
+| `supabase/migrations/0001_init_schema.sql` | ⚠️ PROPOSED, NOT APPLIED | 11 tables with `sw_` prefix + business-membership model + `sw_display_id_counters` for atomic display_id generation. |
+| `supabase/migrations/0002_rls_policies_and_functions.sql` | ⚠️ PROPOSED, NOT APPLIED | RLS on every tenant-scoped table + 3 SECURITY DEFINER RPC functions: `sw_create_business`, `sw_create_sale` (atomic!), `sw_adjust_stock`. |
+| `supabase/migrations/0003_optional_seed_dev_data.sql` | ⚠️ TEMPLATE | Optional dev seed; user must replace placeholder `:business_id`. |
+| `docs/RLS_VERIFICATION.md`         | ✅ committed     | 10-test manual verification procedure. Cannot be automated without a service-role key + test users. |
+| Vitest smoke tests                 | ✅ 33 tests, all pass | Includes new `supabaseServices.test.js` (15 tests for the Supabase code path's NOT_CONFIGURED guard + mock service round-trips). |
 
-## 2. What is NOT implemented
+## 2. What is NOT implemented (awaiting approval / values)
 
-These are explicitly out of scope for Phase 2 and are listed here as
-follow-ups. They should NOT be done without explicit approval.
+1. **Applying the SQL migrations to the dev Supabase project.** The
+   anon key can't run DDL. The user must apply the migrations via
+   the Supabase Dashboard SQL Editor (see §3).
+2. **Refactoring page components to call `src/services/*` instead of
+   importing `mockData` directly.** The service layer is ready, but
+   the pages haven't been migrated. Once the migrations are applied
+   and the user signs in, the demo mode will continue to work for
+   reads (mock data) but writes via the mock layer won't persist to
+   Supabase. Full page-by-page refactor is the next phase.
+3. **Phone/OTP + OAuth providers.** Out of scope.
+4. **Service-role operations in the browser.** NEVER. All privileged
+   operations go via SECURITY DEFINER functions.
+5. **Production secrets.** None committed.
 
-1. **Wiring the `src/services/*` modules to Supabase.** Today every
-   service returns mock data. The day Supabase is configured and the
-   schema applied, the `index.js` switch-point can be flipped with a
-   one-line change per service — but the underlying Supabase-backed
-   implementations need to be written first.
-2. **Applying the SQL migrations.** The two files in
-   `supabase/migrations/` are proposals. They have NOT been applied.
-   The backend engineer must:
-   - Review the schema (especially the `handle_new_user` trigger).
-   - Resolve the open decisions (see §6 below).
-   - Apply to a Supabase project using `supabase db push` or the
-     dashboard SQL editor.
-3. **Reset-password page.** `ForgotPasswordPage` calls
-   `supabase.auth.resetPasswordForEmail({ redirectTo: '/reset-password' })`,
-   but the `/reset-password` route does not exist. It must be built
-   before email-confirmation flows go live.
-4. **Phone/OTP auth.** Only email + password is supported today.
-   Supabase supports phone OTP — adding it would require new env
-   config, a new form, and new RLS for the phone-auth schema.
-5. **OAuth providers (Google, GitHub, etc.).** Not wired.
-6. **Service-role operations.** The browser bundle never imports the
-   service_role key. All privileged operations (stock-movement
-   triggers, audit-log writes, display_id generation) must run via
-   SECURITY DEFINER functions or Edge Functions — NOT via the
-   browser client.
-7. **Production secrets.** No real Supabase URL, anon key, or any
-   other secret has been committed. The repo only contains
-   `.env.example` with placeholders.
+## 3. How to apply the migrations (manual step)
 
-## 3. Required environment variables
+⚠️ **This step requires the user.** I cannot apply DDL with the anon
+key, and I will not request the service_role key in chat (it would
+be a critical security exposure).
 
-Create a `.env.local` (gitignored) from `.env.example`:
+### Step 1 — Open the Supabase Dashboard SQL Editor
 
-```bash
-cp .env.example .env.local
+Go to: https://supabase.com/dashboard/project/yvphrgfxqdjaokaydkyw/sql/new
+
+### Step 2 — Apply the schema migration
+
+Open `supabase/migrations/0001_init_schema.sql` from this repo. Copy
+the entire contents. Paste into the SQL Editor. Click "Run" (or
+`Ctrl+Enter`).
+
+Verify success — the editor should show "Success. No rows returned."
+Run a sanity check:
+
+```sql
+select tablename from pg_tables where schemaname='public' and tablename like 'sw_%';
 ```
 
-Then fill in real values from the Supabase dashboard:
+Should return 13 tables:
+`sw_businesses`, `sw_business_memberships`, `sw_customers`,
+`sw_vendors`, `sw_inventory_items`, `sw_sales`, `sw_sale_items`,
+`sw_stock_movements`, `sw_purchase_orders`, `sw_purchase_order_items`,
+`sw_expenses`, `sw_audit_log`, `sw_display_id_counters`.
+
+### Step 3 — Apply the RLS + RPC functions migration
+
+Open `supabase/migrations/0002_rls_policies_and_functions.sql`. Copy.
+Paste. Run.
+
+Verify success:
+```sql
+select tablename, rowsecurity from pg_tables
+ where schemaname='public' and tablename like 'sw_%';
+```
+Every row should have `rowsecurity = true`.
+
+Also verify the RPC functions are defined:
+```sql
+select routine_name from information_schema.routines
+ where routine_schema='public' and routine_name like 'sw_%';
+```
+Should return: `sw_create_business`, `sw_create_sale`,
+`sw_adjust_stock`, `current_user_sw_business_ids`,
+`current_user_is_business_member`, `current_user_business_role`,
+`next_display_id`.
+
+### Step 4 — Configure Auth URL
+
+In the Supabase Dashboard, go to:
+**Authentication → URL Configuration**
+
+- **Site URL**: `https://stockwise-rho.vercel.app`
+- **Redirect URLs** (add both):
+  - `https://stockwise-rho.vercel.app/reset-password`
+  - `http://localhost:5173/reset-password` (for local dev)
+
+### Step 5 — Verify
+
+Visit https://stockwise-rho.vercel.app/signup (or
+http://localhost:5173/signup locally). Sign up with a real email +
+password. After submit:
+- If "Confirm email" is OFF in Supabase Auth settings, you'll be
+  logged in immediately + redirected to /dashboard.
+- If "Confirm email" is ON, you'll see "Check your email for a
+  confirmation link". Click the link, then return to /login.
+
+Once logged in:
+- Visit `/inventory`. You should see **no items yet** (because you
+  haven't created any). The demo-mode banner should NOT be visible
+  (because Supabase IS configured now).
+- Click "Add Item" → fill the form → submit. The item should
+  persist across refresh.
+- Visit `/forgot-password` → enter your email → submit. You should
+  receive a real email from Supabase with a reset link.
+- Click the reset link → it should take you to
+  `/reset-password` → enter a new password → submit → redirect to
+  `/login`.
+
+If any of the above fails, consult `docs/RLS_VERIFICATION.md` for
+the 10-test manual procedure to verify RLS policies.
+
+## 4. Required environment variables
 
 | Variable                            | Where to find it (Supabase dashboard)                                                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `VITE_SUPABASE_URL`                 | Project Settings → API → **Project URL**                                                                                              |
-| `VITE_SUPABASE_PUBLISHABLE_KEY`      | Project Settings → API → **Project API keys** → **anon public** (NOT the service_role key)                                            |
+| `VITE_SUPABASE_PUBLISHABLE_KEY`     | Project Settings → API → **Project API keys** → **anon public** (NOT the service_role key)                                            |
+| `VITE_PUBLIC_APP_URL`               | The deployed app URL — `https://stockwise-rho.vercel.app` for prod, `http://localhost:5173` for local dev. Must be in the Supabase Redirect URLs list. |
 
 **Never** put the service_role key in a `VITE_*` env var. It bypasses
 RLS and would let any browser user run arbitrary SQL.
 
-## 4. Data-access architecture
+## 5. Data-access architecture
 
 ```
                             ┌────────────────────────────────────────────────────┐
@@ -98,192 +163,142 @@ RLS and would let any browser user run arbitrary SQL.
                                 ┌─────────────────────┴─────────────────────┐
                                 │                                             │
                   ┌─────────────▼──────────────┐            ┌────────────────▼──────────────┐
-                  │   Mock layer (default)     │            │   Supabase layer (future)     │
+                  │   Mock layer (demo mode)    │            │   Supabase layer (configured)  │
                   │   src/services/*Mock.js    │            │   src/services/*Supabase.js   │
-                  │   - in-memory arrays       │            │   - real `supabase.from(...)` │
+                  │   - in-memory arrays       │            │   - real supabase.from(...)  │
                   │   - simulate latency       │            │     queries with RLS          │
-                  │   - all CRUD works locally │            │   - NOT YET WRITTEN           │
+                  │   - all CRUD works locally │            │   - atomic via RPC functions  │
                   └────────────────────────────┘            └───────────────────────────────┘
 ```
 
-The switch is one line per service in `src/services/index.js`:
+## 6. RLS policy requirements (the security boundary)
 
-```js
-import * as inventoryMock from './inventoryMock';
-// import * as inventorySupabase from './inventorySupabase'; // future
-
-export const inventoryService = inventoryMock;
-// export const inventoryService = isSupabaseConfigured ? inventorySupabase : inventoryMock;
-```
-
-Today the mock branch is the only one used. The page components
-already call the services in the right shape (e.g.
-`inventoryService.list({ search, category, status, sort, page,
-pageSize })`) — but they currently import `mockData` directly. The
-next refactor pass (Phase 3) will replace those direct imports with
-service calls.
-
-## 5. RLS policy requirements (the security boundary)
-
-The RLS policies in `supabase/migrations/0002_rls_policies.sql` are
-the PRIMARY authorization boundary. The frontend's `ProtectedRoute`
-is UX only — it does not enforce security.
+The RLS policies in
+`supabase/migrations/0002_rls_policies_and_functions.sql` are the
+PRIMARY authorization boundary. The frontend's `ProtectedRoute` is
+UX only.
 
 Key invariants:
 
 1. Every tenant-scoped table has `ENABLE ROW LEVEL SECURITY`.
-2. Every policy uses `public.current_user_business_id()` to derive the
-   caller's business from `auth.uid()`.
-3. `SELECT` policies filter on `business_id = current_user_business_id()
-   AND deleted_at IS NULL`.
-4. `INSERT` / `UPDATE` policies use `WITH CHECK (business_id =
-   current_user_business_id())` so a malicious client cannot write to
-   another business.
-5. Financial records (`sales`, `expenses`, `purchase_orders`) have NO
-   `DELETE` policy. They are soft-deleted via `deleted_at`.
-6. `stock_movements` and `audit_log` are read-only via the API.
-   Writes happen only via `SECURITY DEFINER` triggers (so a malicious
-   client cannot fake a stock movement or audit entry).
+2. Every policy uses `current_user_sw_business_ids()` (a SETOF uuid
+   helper) to derive the caller's businesses from
+   `sw_business_memberships`. **This is the membership check — it
+   cannot be bypassed by changing client-supplied IDs.**
+3. `SELECT` policies filter on `business_id IN
+   current_user_sw_business_ids() AND deleted_at IS NULL`.
+4. `INSERT`/`UPDATE` policies use `WITH CHECK (business_id IN
+   current_user_sw_business_ids())`.
+5. Financial records (`sw_sales`, `sw_expenses`, `sw_purchase_orders`)
+   have NO `DELETE` policy — they must be soft-deleted via
+   `deleted_at`.
+6. `sw_stock_movements` and `sw_audit_log` are read-only via the
+   API. Writes ONLY via `SECURITY DEFINER` functions
+   (`sw_create_sale`, `sw_adjust_stock`).
+7. `sw_display_id_counters` has no policies — unreadable and
+   unwritable directly. Only `next_display_id()` (SECURITY DEFINER)
+   can touch it.
 
-### How to test RLS safely
+### Atomic sale creation
 
-After applying the migrations to a development Supabase project:
+The frontend cannot do a sequence of independent INSERTs to create a
+sale. Instead, all sale-creation logic lives in the
+`sw_create_sale(p_payload jsonb)` SECURITY DEFINER RPC function:
 
-1. Create two businesses + two users (one in each business).
-2. Sign in as user A and verify they can read/write their own data.
-3. Sign in as user B and verify they cannot read or write user A's
-   data (SQL like `select * from customers where business_id = '<A's
-   business_id>'` should return 0 rows).
-4. Sign in as user A and attempt to INSERT a row with
-   `business_id = '<B's business_id>'` — it should be rejected by
-   the `WITH CHECK` clause.
-5. Sign in as user A and attempt to UPDATE one of B's rows — the
-   `USING` clause should prevent the row from being found.
+1. Verify the caller is a member of `business_id`.
+2. Validate each line item:
+   - `item_id` exists in `sw_inventory_items` AND belongs to this
+     business.
+   - `qty > 0`.
+   - `qty <= item.stock` (cannot oversell; only checked for
+     completed sales).
+   - `unit_price >= 0`.
+3. Compute the total server-side from line items (client-supplied
+   totals are IGNORED).
+4. Generate the `display_id` atomically via `next_display_id()`
+   (uses `pg_advisory_xact_lock` to serialise concurrent calls for
+   the same business+entity).
+5. INSERT the `sw_sales` row.
+6. INSERT each `sw_sale_items` row.
+7. For each item: decrement `sw_inventory_items.stock` + INSERT a
+   `sw_stock_movements` ledger entry.
+8. UPDATE `sw_sales.total` with the server-computed sum.
 
-Run these tests in the Supabase SQL editor with the "Run as
-authenticated user" feature, NOT as the service_role user (which
-bypasses RLS).
+All in a single plpgsql transaction. Partial failures roll back.
 
-## 6. Database decisions requiring backend-engineer approval
+### Manual RLS verification procedure
 
-These were unresolved at audit time. The migrations use the proposed
-defaults — flag any that should be different before applying.
+See `docs/RLS_VERIFICATION.md` — 10 tests covering read isolation,
+unauthorized INSERT/UPDATE, atomic sale creation, server-side total
+computation, unauthenticated access, and privileged-table privacy.
 
-| #  | Decision                                                                                                | Default in proposal                                  |
-| -- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 1  | Token strategy: HttpOnly refresh cookie vs. localStorage                                                | localStorage via Supabase's built-in persistSession  |
-| 2  | Multi-tenancy model                                                                                      | Single business per user (future: `business_members`)|
-| 3  | Currency precision                                                                                       | `numeric(14, 2)` in NGN naira (NOT kobo integers)     |
-| 4  | ID strategy                                                                                              | UUID v4 + `display_id` (ORD-XXXX, PO-XXXX)           |
-| 5  | `POS` vs `Card` payment-method name                                                                     | `Card` (unified)                                     |
-| 6  | `expense.vendor` FK to vendors vs. free-text payee                                                       | Free-text payee                                      |
-| 7  | Stock tracking: `stock` column only vs. `stock_movements` ledger                                          | Ledger                                               |
-| 8  | Soft delete vs. hard delete                                                                              | Soft delete (`deleted_at`)                          |
-| 9  | Pagination: page-based vs. cursor-based                                                                   | Page-based                                           |
-| 10 | `handle_new_user` trigger creates a new business per user                                                | Yes (decision #2 default)                            |
-| 11 | `sale_items` business scope via JOIN to `sales` vs. denormalised `business_id` column                    | JOIN (keeps schema normalised)                       |
-| 12 | Display-ID generation: trigger-managed sequence vs. client-generated                                                                      | Sequence per business (TODO: write the trigger)       |
+## 7. Decisions made / resolved in Phase 3A
 
-Note that #12 is currently a TODO: the migrations create the
-`display_id` column and its unique index, but do NOT yet have a
-trigger that auto-populates it. The backend engineer must either:
+| # | Decision | Resolution |
+|---|----------|-----------|
+| 1 | Token strategy | localStorage via Supabase's `persistSession: true` + `autoRefreshToken: true` + `detectSessionInUrl: true`. |
+| 2 | Multi-tenancy model | Multi-business per user via `sw_business_memberships` join table. v1 frontend uses the first business; v2 will add a business picker. |
+| 3 | Currency precision | `numeric(14, 2)` in naira (business's reporting currency, stored in `sw_businesses.currency`). Multi-currency conversion is out of scope for v1 (documented in 0001_init_schema.sql). |
+| 4 | ID strategy | UUID v4 + `display_id` (ORD-XXXX, PO-XXXX) generated atomically via `next_display_id()` + `sw_display_id_counters` table. |
+| 5 | `POS` vs `Card` payment-method name | Unified on `Card` across sales + expenses. |
+| 6 | `expense.vendor` FK to vendors vs. free-text payee | Free-text payee (with frontend datalist suggestions from `sw_vendors`). |
+| 7 | Stock tracking | Ledger via `sw_stock_movements` — written ONLY by `sw_create_sale` + `sw_adjust_stock` SECURITY DEFINER functions. |
+| 8 | Soft delete vs. hard delete | Soft delete (`deleted_at`) for all business data. Financial records have no DELETE policy. |
+| 9 | Pagination | Page-based (PostgREST `Range` header). |
+| 10 | Trigger creates a new business per user | YES — `sw_create_business()` is called by the frontend after signup. The existing `profiles` table (from the previous schema) is NOT touched. |
+| 11 | `sale_items` business scope via JOIN to `sales` vs. denormalised `business_id` | JOIN (keeps schema normalised). |
+| 12 | Display-ID generation | `next_display_id()` SECURITY DEFINER function using `pg_advisory_xact_lock` + `sw_display_id_counters` table. |
 
-- Add a SECURITY DEFINER function `generate_display_id(p_business
-  uuid, p_prefix text)` that uses an advisory lock + a per-business
-  counter table, and call it from a BEFORE INSERT trigger on
-  `sales` / `purchase_orders`.
-- OR populate `display_id` from the API client (less safe — a
-  malicious client could pass any value, but the unique index
-  would reject duplicates).
+## 8. What remains for Phase 3B
 
-## 7. How to test safely (local development)
+1. **Refactor page components** (`InventoryPage`, `SalesPage`,
+   `CustomersPage`, `VendorsPage`, `ExpensesPage`, `DashboardPage`,
+   `ReportsPage`) to call `src/services/*` instead of importing
+   `mockData` directly. The service layer is ready; the callsites
+   aren't yet updated.
+2. **Active business ID management**: the frontend needs a context
+   or hook that fetches the user's businesses (via
+   `businessesService.listMyBusinesses()`) and exposes the "active
+   business ID" for write operations.
+3. **Mobile responsive testing** of the new `/reset-password` page.
+4. **End-to-end Supabase tests** — currently blocked on the
+   migrations being applied (see §3).
+5. **Tailwind 3 → 4 upgrade** (separate PR, major rewrite, resolves
+   the 7 dev-only vulnerabilities).
 
-### Demo mode (no Supabase credentials required)
+## 9. Handover checklist for the backend engineer
 
-```bash
-npm ci
-npm run dev
-```
+Before marking Phase 3A as "wired":
 
-- Visit `http://localhost:5173/`.
-- Login with any email + any 6+ char password.
-- A `DemoModeBanner` is shown at the top of every protected page.
-- Mutations are in-memory and lost on refresh.
-- Login persists across refresh via the `stockwise.demoUser`
-  localStorage key — but this is NOT real authentication. Anyone
-  with access to the browser can write to localStorage.
+- [ ] Apply `0001_init_schema.sql` to the dev project via SQL Editor.
+- [ ] Apply `0002_rls_policies_and_functions.sql` to the dev project.
+- [ ] Configure Auth Site URL + Redirect URLs (see §3 step 4).
+- [ ] Run the 10-test RLS verification procedure in
+      `docs/RLS_VERIFICATION.md`. All 10 must pass.
+- [ ] Sign up via the app; verify a `sw_businesses` row + an
+      `sw_business_memberships` row (role=owner) are auto-created.
+- [ ] Create an inventory item; refresh; verify it persists.
+- [ ] Create a sale; verify:
+      - `sw_sales` row created with server-computed total.
+      - `sw_sale_items` rows created (one per line).
+      - `sw_inventory_items.stock` decremented.
+      - `sw_stock_movements` ledger entry created (kind=sale, qty=-N).
+- [ ] Try to oversell (qty > stock); verify the sale is rejected AND
+      no partial state remains.
+- [ ] Submit forgot-password; verify the email arrives; click the
+      link; verify the `/reset-password` page lets you set a new
+      password; verify you can log in with the new password.
+- [ ] Open the deployed app at https://stockwise-rho.vercel.app and
+      repeat the signup + create-item flow against prod.
 
-### Supabase mode (requires real Supabase credentials)
+If any of the above fails, file an issue with the specific error
+message and the test step that failed.
 
-1. Create a Supabase project (or use an existing one).
-2. Apply the proposed migrations to a development database (NOT
-   production). Either:
-   - `supabase db push` (if you've linked the project via the Supabase
-     CLI), OR
-   - Dashboard → SQL Editor → paste the contents of
-     `0001_init_schema.sql` then `0002_rls_policies.sql`.
-3. Verify RLS is enabled on every table (Dashboard → Authentication →
-   Policies).
-4. In the Supabase dashboard, configure Auth:
-   - Disable "Confirm email" for development OR enable email
-     confirmation and use a test inbox.
-   - Set the Site URL to `http://localhost:5173`.
-   - Add `http://localhost:5173/forgot-password` to Redirect URLs.
-5. Create `.env.local` with the real `VITE_SUPABASE_URL` and
-   `VITE_SUPABASE_PUBLISHABLE_KEY`.
-6. `npm run dev` — the `DemoModeBanner` should disappear (because
-   `isSupabaseConfigured` is now true).
-7. Sign up a new user. If email confirmation is ON, you'll see a
-   "Check your email" message after submit.
-8. After confirming email, sign in. Refresh the page — you should
-   stay signed in (this verifies the `onAuthStateChange` subscription
-   + `getSession()` restore on mount).
-9. Sign out — the session is cleared from both React state and
-   Supabase's persistence layer.
+## 10. Related documents
 
-## 8. Handover checklist for the backend engineer
-
-Before applying the migrations to a production database, confirm:
-
-- [ ] All 12 decisions in §6 have been reviewed and either accepted
-      or overridden.
-- [ ] The `handle_new_user` trigger + SECURITY DEFINER function have
-      been reviewed (they create a new business per user — this may
-      not match the intended multi-tenancy model).
-- [ ] The display-ID generation strategy (#12) is decided and the
-      trigger is written.
-- [ ] RLS policies are tested with two different users from two
-      different businesses (see §5).
-- [ ] The Supabase project has email confirmation configured (either
-      ON with a working SMTP provider, or OFF for development).
-- [ ] The Supabase project has Site URL and Redirect URLs configured
-      (Auth → URL Configuration).
-- [ ] The frontend `.env.local` has been shared with the dev team
-      OUT of band (NOT committed).
-- [ ] The `VITE_SUPABASE_PUBLISHABLE_KEY` is the **anon public**
-      key, NEVER the service_role key.
-- [ ] A backup of the database has been taken before applying
-      migrations to a shared project.
-
-After the migrations are applied:
-
-- [ ] Run the Vitest smoke tests (`npm test`) against the
-      Supabase-configured local environment — the demo-mode tests
-      should now switch to verifying Supabase behaviour. (Note: the
-      current tests assume demo mode and will need to be parameterised
-      before this step.)
-- [ ] Manually exercise the user journeys documented in
-      `docs/TESTING_REPORT.md` §6 (New Sale, login, refresh,
-      sidebar routes).
-
-## 9. Related documents
-
-- `docs/DATABASE_AUDIT.md` — de-facto schema analysis from
-  `mockData.js` + open questions.
-- `docs/BACKEND_HANDOVER.md` — proposed REST API contracts (in case
-  a non-Supabase backend is later preferred).
+- `docs/DATABASE_AUDIT.md` — schema analysis from `mockData.js` + open questions (Phase 1 baseline).
+- `docs/BACKEND_HANDOVER.md` — proposed REST API contracts (in case a non-Supabase backend is later preferred).
 - `docs/ENVIRONMENT_SETUP.md` — local dev setup + security checklist.
-- `docs/FRONTEND_AUDIT.md` — all audit findings, with current status
-  updated for Phase 2.
-- `docs/TESTING_REPORT.md` — what was actually tested + outstanding
-  verification.
+- `docs/FRONTEND_AUDIT.md` — all audit findings, current status updated.
+- `docs/TESTING_REPORT.md` — what was actually tested + outstanding verification.
+- `docs/RLS_VERIFICATION.md` — 10-test manual RLS verification procedure.
