@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Building2, Phone, ArrowRight, Loader2, Check } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
 // Reusable Input component to keep code clean
 function InputField({ label, name, type = 'text', value, onChange, error, placeholder, icon: Icon, rightElement }) {

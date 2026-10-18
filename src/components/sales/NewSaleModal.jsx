@@ -6,7 +6,7 @@ import {
   Building2, CreditCard, ChevronRight,
   Package, CheckCircle, ArrowLeft,
 } from 'lucide-react';
-import { inventoryItems, paymentMethods } from '../../data/mockData';
+import { inventoryItems } from '../../data/mockData';
 import { ItemIcon } from '../../utils/inventoryIcons';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
@@ -52,6 +52,7 @@ function CartItem({ item, onUpdateQty, onRemove }) {
 }
 
 export default function NewSaleModal({ isOpen, onClose, onSave }) {
+  // ── All hooks called unconditionally at the top (Rules of Hooks) ──
   const [cart, setCart]         = useState([]);
   const [search, setSearch]     = useState('');
   const [customer, setCustomer] = useState('');
@@ -60,8 +61,6 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   const [errors, setErrors]     = useState({});
   const [saving, setSaving]     = useState(false);
   const [step, setStep]         = useState(1); // 1=items, 2=payment
-
-  if (!isOpen) return null;
 
   const filteredInventory = useMemo(() => {
     const q = search.toLowerCase();
@@ -72,6 +71,15 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
       )
     );
   }, [search]);
+
+  const clearCartState = useCallback(() => {
+    setCart([]); setCustomer(''); setPayment('Cash');
+    setNote(''); setStep(1); setSearch(''); setErrors({});
+  }, []);
+
+  const removeFromCart = useCallback((id) => {
+    setCart(prev => prev.filter(c => c.id !== id));
+  }, []);
 
   const addToCart = useCallback((item) => {
     setCart(prev => {
@@ -91,14 +99,11 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   const updateQty = useCallback((id, qty) => {
     if (qty < 1) { removeFromCart(id); return; }
     const item = inventoryItems.find(i => i.id === id);
+    if (!item) return;
     setCart(prev =>
       prev.map(c => c.id === id ? { ...c, qty: Math.min(qty, item.stock) } : c)
     );
-  }, []);
-
-  const removeFromCart = useCallback((id) => {
-    setCart(prev => prev.filter(c => c.id !== id));
-  }, []);
+  }, [removeFromCart]);
 
   const subtotal = cart.reduce((s, c) => s + c.sellingPrice * c.qty, 0);
   const totalItems = cart.reduce((s, c) => s + c.qty, 0);
@@ -112,35 +117,47 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   };
 
   const handleSubmit = async () => {
+    if (cart.length === 0) {
+      setErrors({ cart: 'Add at least one item' });
+      setStep(1);
+      return;
+    }
+    if (!customer.trim()) {
+      setErrors({ customer: 'Customer name is required' });
+      setStep(1);
+      return;
+    }
     setSaving(true);
-    await new Promise(r => setTimeout(r, 800));
-    onSave({
-      id: `ORD-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-      customer: {
-        name:      customer,
-        initials:  customer.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
-        color:     '#f0fdf4',
-        textColor: '#15803d',
-      },
-      items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.sellingPrice })),
-      total:   subtotal,
-      payment,
-      status:  'completed',
-      date:    new Date().toISOString(),
-      note,
-    });
-    setSaving(false);
-    // Reset
-    setCart([]); setCustomer(''); setPayment('Cash');
-    setNote(''); setStep(1); setSearch(''); setErrors({});
-    onClose();
+    try {
+      await new Promise(r => setTimeout(r, 800));
+      onSave({
+        id: `ORD-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+        customer: {
+          name:      customer,
+          initials:  customer.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+          color:     '#f0fdf4',
+          textColor: '#15803d',
+        },
+        items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.sellingPrice })),
+        total:   subtotal,
+        payment,
+        status:  'completed',
+        date:    new Date().toISOString(),
+        note,
+      });
+      clearCartState();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClose = () => {
-    setCart([]); setCustomer(''); setPayment('Cash');
-    setNote(''); setStep(1); setSearch(''); setErrors({});
+    clearCartState();
     onClose();
   };
+
+  // Early return AFTER all hooks have been called.
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">

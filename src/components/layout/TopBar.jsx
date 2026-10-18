@@ -1,7 +1,7 @@
 // src/components/layout/TopBar.jsx
 import { useState } from 'react';
 import { Bell, Search, Menu, X, ChevronDown } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
 const notifications = [
   { id: 1, title: 'Low Stock Alert',     body: 'Sun Hat is down to 3 units',       time: '5m ago',  unread: true,  color: 'bg-amber-500' },
