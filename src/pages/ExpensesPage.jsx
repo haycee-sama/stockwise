@@ -1,5 +1,5 @@
 // src/pages/ExpensesPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Search, ChevronDown, Download, Edit2, Trash2,
   Receipt, TrendingDown, Calendar, Tag, CreditCard,
@@ -18,8 +18,13 @@ import {
 import TopBar             from '../components/layout/TopBar';
 import ExpenseModal       from '../components/expenses/ExpenseModal';
 import ExpenseDeleteModal from '../components/expenses/ExpenseDeleteModal';
+import { expensesService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
 import {
-  expensesData, expenseCategories, expensePaymentMethods, expenseTrend,
+  expenseCategories as staticCategories,
+  expensePaymentMethods as staticPaymentMethods,
+  expenseTrend as staticTrend,
 } from '../data/mockData';
 
 const naira = (v) => {
@@ -82,7 +87,7 @@ function CategoryBreakdown({ expenses }) {
     const totals = {};
     expenses.forEach(e => { totals[e.category] = (totals[e.category] ?? 0) + e.amount; });
     const grand = Object.values(totals).reduce((s, v) => s + v, 0);
-    return expenseCategories
+    return staticCategories
       .map(cat => ({ ...cat, total: totals[cat.id] ?? 0, pct: grand > 0 ? ((totals[cat.id] ?? 0) / grand) * 100 : 0 }))
       .filter(c => c.total > 0)
       .sort((a, b) => b.total - a.total);
@@ -133,7 +138,10 @@ function CategoryBreakdown({ expenses }) {
 }
 
 export default function ExpensesPage() {
-  const [expenses, setExpenses]     = useState(expensesData);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [expenses, setExpenses]     = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [categoryFilter, setCategory] = useState('all');
   const [paymentFilter, setPayment] = useState('All');
@@ -141,6 +149,29 @@ export default function ExpensesPage() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editExpense, setEdit]      = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, expense: null });
+
+  const fetchExpenses = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await expensesService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setExpenses([]);
+      } else {
+        setExpenses(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setExpenses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -152,7 +183,7 @@ export default function ExpensesPage() {
     const catTotals = {};
     thisMonth.forEach(e => { catTotals[e.category] = (catTotals[e.category] ?? 0) + e.amount; });
     const topId  = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const topCat = expenseCategories.find(c => c.id === topId);
+    const topCat = staticCategories.find(c => c.id === topId);
     return {
       thisMonth:  thisMonth.reduce((s, e) => s + e.amount, 0),
       thisWeek:   thisWeek.reduce((s, e) => s + e.amount, 0),
@@ -177,16 +208,30 @@ export default function ExpensesPage() {
   const openEdit = useCallback((e) => { setEdit(e);    setModalOpen(true); }, []);
   const openDel  = useCallback((e) => setDeleteModal({ open: true, expense: e }), []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    const isExisting = expenses.some(e => String(e.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await expensesService.update(saved.id, payload)
+      : await expensesService.create(payload);
+    if (svcErr) {
+      console.error('[ExpensesPage] save failed:', svcErr);
+      return;
+    }
     setExpenses(prev =>
-      prev.some(e => e.id === saved.id)
-        ? prev.map(e => e.id === saved.id ? saved : e)
-        : [saved, ...prev]
+      prev.some(e => String(e.id) === String(persisted.id))
+        ? prev.map(e => String(e.id) === String(persisted.id) ? persisted : e)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [expenses, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setExpenses(prev => prev.filter(e => e.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await expensesService.remove(id);
+    if (svcErr) {
+      console.error('[ExpensesPage] delete failed:', svcErr);
+      return;
+    }
+    setExpenses(prev => prev.filter(e => String(e.id) !== String(id)));
   }, []);
 
   const hasFilters = search || categoryFilter !== 'all' || paymentFilter !== 'All';
@@ -208,7 +253,20 @@ export default function ExpensesPage() {
       <TopBar title="Expenses" subtitle="Track your business spending" actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading expenses…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchExpenses} />
+        )}
+
+        {!loading && !error && (
+          <>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Receipt}     iconBg="bg-red-100"    iconColor="text-red-500"    label="This Month"    value={naira(stats.thisMonth)}    sub="Current month"     subColor="text-red-500"    delay="0.05s" />
           <StatCard icon={Calendar}    iconBg="bg-amber-100"  iconColor="text-amber-600"  label="This Week"     value={naira(stats.thisWeek)}     sub="Last 7 days"       subColor="text-amber-600"  delay="0.10s" />
@@ -222,7 +280,7 @@ export default function ExpensesPage() {
             <h3 className="text-sm font-bold text-gray-900 mb-1">Monthly Trend</h3>
             <p className="text-xs text-gray-400 mb-5">6-month spend overview</p>
             <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={expenseTrend}>
+              <AreaChart data={staticTrend}>
                 <defs>
                   <linearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.15} />
@@ -253,7 +311,7 @@ export default function ExpensesPage() {
               {expenses.length}
             </span>
           </button>
-          {expenseCategories.filter(cat => expenses.some(e => e.category === cat.id)).map(cat => {
+          {staticCategories.filter(cat => expenses.some(e => e.category === cat.id)).map(cat => {
             const Icon  = catIconMap[cat.icon] ?? Wrench;
             const count = expenses.filter(e => e.category === cat.id).length;
             const isActive = categoryFilter === cat.id;
@@ -300,7 +358,7 @@ export default function ExpensesPage() {
                 <select value={paymentFilter} onChange={e => setPayment(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
                   <option value="All">All Payments</option>
-                  {expensePaymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
+                  {staticPaymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -342,7 +400,7 @@ export default function ExpensesPage() {
                 </thead>
                 <tbody>
                   {filtered.map(expense => {
-                    const cat  = expenseCategories.find(c => c.id === expense.category);
+                    const cat  = staticCategories.find(c => c.id === expense.category);
                     const Icon = cat?.Icon;
                     return (
                       <tr key={expense.id} className="border-b border-gray-50 last:border-0 hover:bg-red-50/10 transition-colors group">
@@ -406,6 +464,8 @@ export default function ExpensesPage() {
             <span>Showing <strong className="text-gray-700">{filtered.length}</strong> of {expenses.length} expenses</span>
             <span className="hidden sm:block">Filtered total: <strong className="text-red-500">₦{filtered.reduce((s,e) => s + e.amount, 0).toLocaleString()}</strong></span>
           </div>
+        )}
+                </>
         )}
       </main>
 

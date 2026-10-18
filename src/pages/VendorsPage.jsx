@@ -1,5 +1,5 @@
 // src/pages/VendorsPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Upload, Search, ChevronDown, Edit2, Trash2,
   Eye, Phone, MapPin, Truck, Package, TrendingUp,
@@ -11,7 +11,10 @@ import VendorModal       from '../components/vendors/VendorModal';
 import VendorDrawer      from '../components/vendors/VendorDrawer';
 import VendorDeleteModal from '../components/vendors/VendorDeleteModal';
 import PlaceOrderModal   from '../components/vendors/PlaceOrderModal';
-import { vendorsData, vendorCategories, vendorStatuses } from '../data/mockData';
+import { vendorsService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import { vendorCategories as staticCategories, vendorStatuses as staticStatuses } from '../data/mockData';
 
 const naira = (v) => {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -140,7 +143,10 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
 }
 
 export default function VendorsPage() {
-  const [vendors, setVendors]       = useState(vendorsData);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [vendors, setVendors]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [categoryFilter, setCategory] = useState('All');
   const [statusFilter, setStatus]   = useState('All');
@@ -150,6 +156,29 @@ export default function VendorsPage() {
   const [drawer, setDrawer]         = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, vendor: null });
   const [orderModal, setOrderModal] = useState({ open: false, vendor: null });
+
+  const fetchVendors = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await vendorsService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setVendors([]);
+      } else {
+        setVendors(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setVendors([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchVendors(); }, [fetchVendors]);
 
   const stats = useMemo(() => ({
     total:     vendors.length,
@@ -180,22 +209,42 @@ export default function VendorsPage() {
   const openDel      = useCallback((v) => setDeleteModal({ open: true, vendor: v }), []);
   const openOrder    = useCallback((v) => { setOrderModal({ open: true, vendor: v }); setDrawer(null); }, []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    const isExisting = vendors.some(v => String(v.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await vendorsService.update(saved.id, payload)
+      : await vendorsService.create(payload);
+    if (svcErr) {
+      console.error('[VendorsPage] save failed:', svcErr);
+      return;
+    }
     setVendors(prev =>
-      prev.some(v => v.id === saved.id)
-        ? prev.map(v => v.id === saved.id ? saved : v)
-        : [...prev, saved]
+      prev.some(v => String(v.id) === String(persisted.id))
+        ? prev.map(v => String(v.id) === String(persisted.id) ? persisted : v)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [vendors, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setVendors(prev => prev.filter(v => v.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await vendorsService.remove(id);
+    if (svcErr) {
+      console.error('[VendorsPage] delete failed:', svcErr);
+      return;
+    }
+    setVendors(prev => prev.filter(v => String(v.id) !== String(id)));
     if (drawer?.id === id) setDrawer(null);
   }, [drawer]);
 
-  const handlePlaceOrder = useCallback((vendorId, newOrder, total) => {
+  const handlePlaceOrder = useCallback(async (vendorId, newOrder, total) => {
+    const { error: svcErr } = await vendorsService.placeOrder(vendorId, newOrder, total);
+    if (svcErr) {
+      console.error('[VendorsPage] placeOrder failed:', svcErr);
+      // Do NOT update local state — the server didn't persist.
+      return;
+    }
     setVendors(prev => prev.map(v => {
-      if (v.id !== vendorId) return v;
+      if (String(v.id) !== String(vendorId)) return v;
       return { ...v, totalOrders: v.totalOrders + 1, pendingAmount: v.pendingAmount + total, lastOrder: newOrder.date, orders: [newOrder, ...(v.orders ?? [])] };
     }));
   }, []);
@@ -217,7 +266,20 @@ export default function VendorsPage() {
       <TopBar title="Vendors" subtitle={`${vendors.length} suppliers · ${naira(stats.totalPaid)} total purchases`} actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading vendors…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchVendors} />
+        )}
+
+        {!loading && !error && (
+          <>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Truck}      iconBg="bg-blue-100"   iconColor="text-blue-600"   label="Total Vendors"    value={stats.total}            sub={`${stats.active} active`} delay="0.05s" />
           <StatCard icon={Package}    iconBg="bg-green-100"  iconColor="text-green-600"  label="Active Suppliers" value={stats.active}           sub="Currently active" delay="0.10s" />
@@ -261,14 +323,14 @@ export default function VendorsPage() {
               <div className="relative">
                 <select value={categoryFilter} onChange={e => setCategory(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {vendorCategories.map(c => <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>)}
+                  {staticCategories.map(c => <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
                 <select value={statusFilter} onChange={e => setStatus(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {vendorStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
+                  {staticStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -318,6 +380,8 @@ export default function VendorsPage() {
             <span>Showing <strong className="text-gray-700">{filtered.length}</strong> of {vendors.length} vendors</span>
             <span className="hidden sm:block">Combined spend: <strong className="text-green-600">{naira(filtered.reduce((s, v) => s + v.totalPaid, 0))}</strong></span>
           </div>
+        )}
+                </>
         )}
       </main>
 

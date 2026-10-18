@@ -1,5 +1,5 @@
 // src/pages/CustomersPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Upload, Search, ChevronDown, Edit2, Trash2,
   Eye, Phone, Mail, MapPin, Users, TrendingUp,
@@ -10,7 +10,10 @@ import TopBar              from '../components/layout/TopBar';
 import CustomerModal       from '../components/customers/CustomerModal';
 import CustomerDrawer      from '../components/customers/CustomerDrawer';
 import CustomerDeleteModal from '../components/customers/CustomerDeleteModal';
-import { customersData, customerTypes, customerStatuses } from '../data/mockData';
+import { customersService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import { customerTypes as staticTypes, customerStatuses as staticStatuses } from '../data/mockData';
 
 const naira = (v) => {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -132,7 +135,10 @@ function CustomerCard({ customer, onView, onEdit, onDelete }) {
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers]   = useState(customersData);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [customers, setCustomers]   = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [typeFilter, setType]       = useState('All');
   const [statusFilter, setStatus]   = useState('All');
@@ -142,6 +148,30 @@ export default function CustomersPage() {
   const [drawer, setDrawer]         = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, customer: null });
   const [showFilters, setShowFilters] = useState(false);
+
+  // ── Fetch customers via the service layer ─────
+  const fetchCustomers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await customersService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setCustomers([]);
+      } else {
+        setCustomers(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
   const stats = useMemo(() => {
     const thisMonth = new Date(); thisMonth.setDate(1);
@@ -174,16 +204,30 @@ export default function CustomersPage() {
   const openView  = useCallback((c) => setDrawer(c), []);
   const openDel   = useCallback((c) => setDeleteModal({ open: true, customer: c }), []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    const isExisting = customers.some(c => String(c.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await customersService.update(saved.id, payload)
+      : await customersService.create(payload);
+    if (svcErr) {
+      console.error('[CustomersPage] save failed:', svcErr);
+      return;
+    }
     setCustomers(prev =>
-      prev.some(c => c.id === saved.id)
-        ? prev.map(c => c.id === saved.id ? saved : c)
-        : [...prev, saved]
+      prev.some(c => String(c.id) === String(persisted.id))
+        ? prev.map(c => String(c.id) === String(persisted.id) ? persisted : c)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [customers, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setCustomers(prev => prev.filter(c => c.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await customersService.remove(id);
+    if (svcErr) {
+      console.error('[CustomersPage] delete failed:', svcErr);
+      return;
+    }
+    setCustomers(prev => prev.filter(c => String(c.id) !== String(id)));
     if (drawer?.id === id) setDrawer(null);
   }, [drawer]);
 
@@ -208,7 +252,20 @@ export default function CustomersPage() {
         actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading customers…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchCustomers} />
+        )}
+
+        {!loading && !error && (
+          <>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Users}      iconBg="bg-blue-100"   iconColor="text-blue-600"   label="Total"       value={stats.total}          sub={`${filtered.length} shown`} delay="0.05s" />
           <StatCard icon={UserCheck}  iconBg="bg-green-100"  iconColor="text-green-600"  label="Active"      value={stats.active}         sub="Currently active" delay="0.10s" />
@@ -275,14 +332,14 @@ export default function CustomersPage() {
               <div className="relative">
                 <select value={typeFilter} onChange={e => setType(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {customerTypes.map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
+                  {staticTypes.map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
                 <select value={statusFilter} onChange={e => setStatus(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {customerStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
+                  {staticStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -397,6 +454,8 @@ export default function CustomersPage() {
             <span>Showing <strong className="text-gray-700">{filtered.length}</strong> of {customers.length} customers</span>
             <span className="hidden sm:block">Combined revenue: <strong className="text-green-600">{naira(filtered.reduce((s, c) => s + c.totalSpent, 0))}</strong></span>
           </div>
+        )}
+          </>
         )}
       </main>
 
