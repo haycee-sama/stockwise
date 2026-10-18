@@ -3,6 +3,8 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
+import { BusinessProvider } from './context/BusinessContext';
+import { useBusiness } from './context/useBusiness';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import Sidebar from './components/layout/Sidebar';
 import MobileNav from './components/layout/MobileNav';
@@ -74,10 +76,55 @@ function AppLayout() {
 // on mount. Without this, `ProtectedRoute` would render a `<Navigate
 // to="/login">` on first paint even when there IS a stored session,
 // because `user` is null until `useEffect` in AuthProvider completes.
+//
+// Phase 3B: ProtectedRoute also wraps the children in BusinessProvider
+// so that page components can useBusiness() to get the active business
+// ID. In Supabase mode, BusinessProvider auto-provisions a business
+// on first signup (idempotent — only creates one if list returns 0).
 function ProtectedRoute() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <PageLoader />;
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  return (
+    <BusinessProvider>
+      <BusinessReadyGate>
+        <Outlet />
+      </BusinessReadyGate>
+    </BusinessProvider>
+  );
+}
+
+// Phase 3B: gate that shows a loader while BusinessProvider is
+// discovering/provisioning the user's businesses. Prevents pages
+// from rendering with `activeBusinessId === null` (which would
+// cause every service call to send `businessId: null` and get
+// rejected by RLS).
+function BusinessReadyGate({ children }) {
+  const { isBusinessLoading, businessError, activeBusinessId } = useBusiness();
+  if (isBusinessLoading) return <PageLoader />;
+  if (businessError) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-gray-50 px-6 text-center">
+        <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mb-5">
+          <Package size={26} className="text-red-500" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Business setup error</h2>
+        <p className="text-sm text-gray-500 mb-1 max-w-md">
+          Could not load or provision your business. Try reloading — and
+          if the problem persists, sign out and back in.
+        </p>
+        <p className="text-[11px] text-gray-400 font-mono mb-5 max-w-md break-words">
+          {businessError.message}
+        </p>
+      </div>
+    );
+  }
+  if (!activeBusinessId) {
+    // Should not happen — but if it does, refuse to render rather
+    // than sending null business_id to service calls.
+    return <PageLoader />;
+  }
+  return children;
 }
 
 function AuthRoute({ children }) {
