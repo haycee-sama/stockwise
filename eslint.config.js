@@ -23,7 +23,17 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Allow capitalized identifiers (e.g. `Icon`, `Image`) and
+      // underscore-prefixed names to go unused. This mirrors the
+      // React convention where a component is destructured from
+      // props as `icon: Icon` and then rendered as `<Icon />`. The
+      // pattern applies to both top-level variables and function
+      // arguments / destructured props.
+      'no-unused-vars': ['error', {
+        varsIgnorePattern: '^[A-Z_]',
+        argsIgnorePattern: '^[A-Z_]',
+        caughtErrorsIgnorePattern: '^[A-Z_]',
+      }],
     },
   },
 ])

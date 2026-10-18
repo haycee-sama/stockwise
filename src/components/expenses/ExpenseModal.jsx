@@ -1,5 +1,5 @@
 // src/components/expenses/ExpenseModal.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   X, Receipt, Loader2, Plus, CheckCircle,
   Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench,
@@ -42,28 +42,19 @@ const emptyForm = {
 };
 
 export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
-  const [form, setForm]     = useState(emptyForm);
+  // Lazy initialiser — derives from `editExpense` if present.
+  // Replaces the previous effect-driven form sync (which fired
+  // `setState` inside `useEffect` and triggered cascading renders —
+  // react-hooks/set-state-in-effect). Combined with a `key` prop on
+  // the caller side, the form state is correctly reset on every edit
+  // target change.
+  const [form, setForm]     = useState(() => editExpense
+    ? { name: editExpense.name ?? '', category: editExpense.category ?? '', vendor: editExpense.vendor ?? '', amount: editExpense.amount ?? '', date: editExpense.date ?? new Date().toISOString().slice(0, 10), payment: editExpense.payment ?? 'Cash', note: editExpense.note ?? '' }
+    : { ...emptyForm });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!editExpense;
-
-  useEffect(() => {
-    if (editExpense) {
-      setForm({
-        name:     editExpense.name     ?? '',
-        category: editExpense.category ?? '',
-        vendor:   editExpense.vendor   ?? '',
-        amount:   editExpense.amount   ?? '',
-        date:     editExpense.date     ?? new Date().toISOString().slice(0, 10),
-        payment:  editExpense.payment  ?? 'Cash',
-        note:     editExpense.note     ?? '',
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setErrors({});
-  }, [editExpense, isOpen]);
 
   if (!isOpen) return null;
 

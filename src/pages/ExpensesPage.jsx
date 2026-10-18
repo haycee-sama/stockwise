@@ -4,7 +4,13 @@ import {
   Plus, Search, ChevronDown, Download, Edit2, Trash2,
   Receipt, TrendingDown, Calendar, Tag, CreditCard,
   Banknote, Building2, X, SlidersHorizontal, AlertTriangle,
+  Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench,
 } from 'lucide-react';
+
+// P2-005 fix: mock expense categories use a lowercase `icon` field
+// (Lucide name string), not a capitalised `Icon` property. Map the
+// string to the Lucide component before rendering.
+const catIconMap = { Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench };
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, AreaChart, Area,
@@ -93,7 +99,7 @@ function CategoryBreakdown({ expenses }) {
       ) : (
         <div className="space-y-4">
           {breakdown.map(cat => {
-            const Icon = cat.Icon;
+            const Icon = catIconMap[cat.icon] ?? Wrench;
             return (
               <div key={cat.id}>
                 <div className="flex items-center justify-between mb-1.5">
@@ -248,7 +254,7 @@ export default function ExpensesPage() {
             </span>
           </button>
           {expenseCategories.filter(cat => expenses.some(e => e.category === cat.id)).map(cat => {
-            const Icon  = cat.Icon;
+            const Icon  = catIconMap[cat.icon] ?? Wrench;
             const count = expenses.filter(e => e.category === cat.id).length;
             const isActive = categoryFilter === cat.id;
             return (
@@ -403,7 +409,7 @@ export default function ExpensesPage() {
         )}
       </main>
 
-      <ExpenseModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editExpense={editExpense} />
+      <ExpenseModal key={editExpense?.id ?? 'new'} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editExpense={editExpense} />
       <ExpenseDeleteModal isOpen={deleteModal.open} expense={deleteModal.expense} onClose={() => setDeleteModal({ open: false, expense: null })} onConfirm={handleDelete} />
     </div>
   );

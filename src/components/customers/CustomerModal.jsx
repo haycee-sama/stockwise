@@ -1,5 +1,5 @@
 // src/components/customers/CustomerModal.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Users, Loader2, CheckCircle, Phone, Mail, MapPin, Building2 } from 'lucide-react';
 import { customerTypes, avatarColors } from '../../data/mockData';
 
@@ -44,27 +44,17 @@ const emptyForm = {
 };
 
 export default function CustomerModal({ isOpen, onClose, onSave, editCustomer }) {
-  const [form, setForm]     = useState(emptyForm);
+  // Lazy initialiser — derives the form state from `editCustomer`
+  // when present, otherwise uses `emptyForm`. Combined with a `key`
+  // prop on the caller side, this replaces the previous effect-driven
+  // sync (which fired `setState` inside `useEffect` and triggered
+  // cascading renders — react-hooks/set-state-in-effect).
+  const [form, setForm]     = useState(() => editCustomer
+    ? { firstName: editCustomer.firstName ?? '', lastName:  editCustomer.lastName  ?? '', email:     editCustomer.email     ?? '', phone:     editCustomer.phone     ?? '', type:      editCustomer.type      ?? '', location:  editCustomer.location  ?? '', note:      editCustomer.note      ?? '' }
+    : { ...emptyForm });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const isEditing = !!editCustomer;
-
-  useEffect(() => {
-    if (editCustomer) {
-      setForm({
-        firstName: editCustomer.firstName ?? '',
-        lastName:  editCustomer.lastName  ?? '',
-        email:     editCustomer.email     ?? '',
-        phone:     editCustomer.phone     ?? '',
-        type:      editCustomer.type      ?? '',
-        location:  editCustomer.location  ?? '',
-        note:      editCustomer.note      ?? '',
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setErrors({});
-  }, [editCustomer, isOpen]);
 
   if (!isOpen) return null;
 
@@ -79,7 +69,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
     if (!form.firstName.trim()) e.firstName = 'First name is required';
     if (!form.lastName.trim())  e.lastName  = 'Last name is required';
     if (!form.phone.trim())     e.phone     = 'Phone number is required';
-    else if (!/^[0-9+\s\-]{7,15}$/.test(form.phone)) e.phone = 'Enter a valid phone number';
+    else if (!/^\+?\d[\d ]{6,14}$/.test(form.phone)) e.phone = 'Enter a valid phone number';
     if (form.email && !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email';
     if (!form.type)             e.type     = 'Please select a customer type';
     if (!form.location.trim())  e.location = 'Location is required';

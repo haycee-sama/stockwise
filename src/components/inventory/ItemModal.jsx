@@ -1,8 +1,8 @@
 // src/components/inventory/ItemModal.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Package, Loader2, CheckCircle } from 'lucide-react';
 import { categories, suppliers } from '../../data/mockData';
-import { iconOptions, iconMap } from '../../utils/inventoryIcons';
+import { iconOptions, iconMap } from '../../utils/inventoryIconData';
 
 // ── Reusable Field wrapper ────────────────────────
 function Field({ label, required, error, children }) {
@@ -94,32 +94,18 @@ const bgOptions = [
 ];
 
 export default function ItemModal({ isOpen, onClose, onSave, editItem }) {
-  const [form, setForm]       = useState(emptyForm);
+  // Lazy initialiser — derives from `editItem` if present.
+  // Combined with a `key` prop on the caller side, this replaces
+  // the previous effect-driven form sync (which fired `setState`
+  // inside `useEffect` and triggered cascading renders —
+  // react-hooks/set-state-in-effect).
+  const [form, setForm]       = useState(() => editItem
+    ? { name: editItem.name ?? '', sku: editItem.sku ?? '', category: editItem.category ?? '', supplier: editItem.supplier ?? '', stock: editItem.stock ?? '', threshold: editItem.threshold ?? '', costPrice: editItem.costPrice ?? '', sellingPrice: editItem.sellingPrice ?? '', iconName: editItem.iconName ?? 'Package', bg: editItem.bg ?? '#f0fdf4' }
+    : { ...emptyForm });
   const [errors, setErrors]   = useState({});
   const [saving, setSaving]   = useState(false);
   const [step, setStep]       = useState(1); // 2-step form
   const isEditing = !!editItem;
-
-  useEffect(() => {
-    if (editItem) {
-      setForm({
-        name:         editItem.name         ?? '',
-        sku:          editItem.sku          ?? '',
-        category:     editItem.category     ?? '',
-        supplier:     editItem.supplier     ?? '',
-        stock:        editItem.stock        ?? '',
-        threshold:    editItem.threshold    ?? '',
-        costPrice:    editItem.costPrice    ?? '',
-        sellingPrice: editItem.sellingPrice ?? '',
-        iconName:     editItem.iconName     ?? 'Package',
-        bg:           editItem.bg           ?? '#f0fdf4',
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setErrors({});
-    setStep(1);
-  }, [editItem, isOpen]);
 
   if (!isOpen) return null;
 

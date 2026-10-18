@@ -4,6 +4,12 @@ import { X, ShoppingCart, Loader2, Plus, Minus, Trash2, Package } from 'lucide-r
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 
+// Module-level counter for PO IDs. Avoids `Math.random` inside
+// the component body (react-hooks/purity rule) and is monotonic
+// so retrying the same order placement cannot collide with a
+// previous successful placement's ID within this session.
+let __poCounter = 100;
+
 export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
   const [orderItems, setOrderItems] = useState([{ name: '', qty: 1, unitPrice: '' }]);
   const [note, setNote]             = useState('');
@@ -38,7 +44,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
     await new Promise(r => setTimeout(r, 800));
 
     const newOrder = {
-      id:     `PO-${String(Math.floor(Math.random() * 900) + 100)}`,
+      id:     `PO-${String(__poCounter++)}`,
       date:   new Date().toISOString().slice(0, 10),
       items:  orderItems.filter(r => r.name.trim()).length,
       total,

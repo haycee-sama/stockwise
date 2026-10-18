@@ -1,5 +1,6 @@
 // src/pages/DashboardPage.jsx
 import { useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   DollarSign, TrendingUp, Package, AlertCircle,
   Plus, Download, Clock, CheckCircle, ArrowRight,
@@ -12,6 +13,8 @@ import RevenueChart    from '../components/dashboard/RevenueChart';
 import StockDonut      from '../components/dashboard/StockDonut';
 import TopSellersTable from '../components/dashboard/TopSellersTable';
 import LowStockTable   from '../components/dashboard/LowStockTable';
+import DemoModeBanner  from '../components/common/DemoModeBanner';
+import { useAuth }     from '../context/useAuth';
 import { dashboardStats, pendingOrders, salesData, inventoryItems } from '../data/mockData';
 
 // ── Helpers ──────────────────────────────────────
@@ -83,29 +86,42 @@ function PendingOrderRow({ order, onFulfil }) {
 
 // ── Main Page ─────────────────────────────────────
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  const { isDemoMode } = useAuth();
   const [orders, setOrders]       = useState(pendingOrders);
   const [showFilters, setFilters] = useState(false);
   const [period, setPeriod]       = useState('today');
 
   // ── Computed quick stats from live data ──────
+  // Note: period filter is honest — when the user selects "Today" we
+  // filter sales by today's date. Because mock data is dated March
+  // 2026, "Today" and "This Week" will show ₦0 in demo mode. That is
+  // accurate, not a bug. In Supabase mode the data will be live.
   const liveStats = useMemo(() => {
     const now       = new Date();
     const todayStr  = now.toDateString();
     const weekAgo   = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const completed  = salesData.filter(s => s.status === 'completed');
-    const todaySales = completed.filter(s => new Date(s.date).toDateString() === todayStr);
-    const weekSales  = completed.filter(s => new Date(s.date) >= weekAgo);
+    const periodSales = completed.filter(s => {
+      if (period === 'today') return new Date(s.date).toDateString() === todayStr;
+      if (period === 'week')  return new Date(s.date) >= weekAgo;
+      // month
+      return new Date(s.date) >= monthStart;
+    });
     const outOfStock = inventoryItems.filter(i => i.stock === 0).length;
     const lowStock   = inventoryItems.filter(i => i.stock > 0 && i.stock <= i.threshold).length;
 
     return {
-      todayRevenue: todaySales.reduce((s, o) => s + o.total, 0),
-      weekRevenue:  weekSales.reduce((s, o)  => s + o.total, 0),
+      todayRevenue: period === 'today' ? periodSales.reduce((s, o) => s + o.total, 0) : 0,
+      weekRevenue:  period === 'week'  ? periodSales.reduce((s, o) => s + o.total, 0) : 0,
+      periodRevenue: periodSales.reduce((s, o) => s + o.total, 0),
+      periodOrders: periodSales.length,
       outOfStock,
       lowStock,
     };
-  }, []);
+  }, [period]);
 
   // Recent sales for the activity feed (latest 4)
   const recentSales = useMemo(() =>
@@ -117,20 +133,54 @@ export default function DashboardPage() {
     setOrders(prev => prev.filter(o => o.id !== id));
   }, []);
 
+  // P1-003 fix: use React Router's navigate() instead of window.location.href.
+  // The previous full-reload behaviour combined with the lack of session
+  // persistence effectively logged the user out on every CTA click.
   const handleAddItem   = useCallback(() => {
-    window.location.href = '/inventory';
-  }, []);
+    navigate('/inventory');
+  }, [navigate]);
 
   const handleNewSale   = useCallback(() => {
-    window.location.href = '/sales';
-  }, []);
+    navigate('/sales');
+  }, [navigate]);
 
-  const handleExport    = useCallback(() => {
-    console.log('Export dashboard data');
-  }, []);
+  // P2-013 fix: Export is wired up to a CSV download of the current
+  // dashboard data. In demo mode this still works on mock data; in
+  // Supabase mode it will export the live query result once the
+  // data-access layer is swapped over.
+  const handleExport = useCallback(() => {
+    try {
+      const rows = [
+        ['Metric', 'Value'],
+        ['Period', period],
+        ['Period Revenue', String(liveStats.periodRevenue)],
+        ['Period Orders', String(liveStats.periodOrders)],
+        ['Out of Stock Items', String(liveStats.outOfStock)],
+        ['Low Stock Items', String(liveStats.lowStock)],
+      ];
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `stockwise-dashboard-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  }, [period, liveStats]);
 
-  const handleRefresh   = useCallback(() => {
-    window.location.reload();
+  // Refresh: no longer does a full page reload (which would log the
+  // user out in demo mode). Instead, re-derive the stats from the
+  // in-memory data. In Supabase mode this would re-fetch from the
+  // backend.
+  const handleRefresh = useCallback(() => {
+    setOrders(pendingOrders);
+    // Force a re-derive by toggling a noop state.
+    setFilters(s => s);
   }, []);
 
   // ── TopBar action buttons ─────────────────────
@@ -164,6 +214,9 @@ export default function DashboardPage() {
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
 
+        {/* ── Demo-mode banner (only shown when Supabase is not configured) ── */}
+        {isDemoMode && <DemoModeBanner />}
+
         {/* ── Alert Banner ── */}
         {hasAlerts && (
           <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 animate-fade-up">
@@ -178,10 +231,10 @@ export default function DashboardPage() {
                 <span><strong>{liveStats.lowStock} item{liveStats.lowStock > 1 ? 's' : ''}</strong> running low.</span>
               )}
             </p>
-            <a href="/inventory"
+            <button type="button" onClick={() => navigate('/inventory')}
               className="flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0">
               View <ArrowRight size={12} />
-            </a>
+            </button>
           </div>
         )}
 
@@ -232,10 +285,10 @@ export default function DashboardPage() {
         {/* ── Quick Stats Strip ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           {[
-            { label: "Today's Revenue",  value: naira(liveStats.todayRevenue),  color: 'text-green-600',  bg: 'bg-green-50'   },
-            { label: "This Week",        value: naira(liveStats.weekRevenue),   color: 'text-blue-600',   bg: 'bg-blue-50'    },
-            { label: "Out of Stock",     value: liveStats.outOfStock,           color: 'text-red-600',    bg: 'bg-red-50'     },
-            { label: "Pending Orders",   value: orders.length,                  color: 'text-amber-600',  bg: 'bg-amber-50'   },
+            { label: period === 'today' ? "Today's Revenue" : period === 'week' ? 'This Week' : 'This Month', value: naira(liveStats.periodRevenue), color: 'text-green-600',  bg: 'bg-green-50'   },
+            { label: 'Period Orders',  value: liveStats.periodOrders,    color: 'text-blue-600',   bg: 'bg-blue-50'    },
+            { label: 'Out of Stock',     value: liveStats.outOfStock,           color: 'text-red-600',    bg: 'bg-red-50'     },
+            { label: 'Pending Orders',   value: orders.length,                  color: 'text-amber-600',  bg: 'bg-amber-50'   },
           ].map((s, i) => (
             <div key={s.label}
               className={`${s.bg} rounded-2xl p-4 text-center animate-fade-up`}

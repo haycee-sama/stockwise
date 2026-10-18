@@ -1,6 +1,7 @@
 // src/components/dashboard/TopSellersTable.jsx
 import { ArrowRight, TrendingUp, TrendingDown, ShoppingBag } from 'lucide-react';
 import { topSellers } from '../../data/mockData';
+import { ItemIcon } from '../../utils/inventoryIcons';
 
 function formatNaira(v) {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -57,11 +58,9 @@ export default function TopSellersTable() {
                 {/* Product */}
                 <td className="px-3 py-3.5">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                      style={{ background: item.bg }}>
-                      {/* Render item emoji as text — this stays since it's product art not UI */}
-                      {item.emoji}
-                    </div>
+                    {/* P2-006 fix: topSellers has `icon` (Lucide name string)
+                        and `bg`, not `emoji`. Use the shared ItemIcon helper. */}
+                    <ItemIcon iconName={item.icon ?? 'Package'} bg={item.bg} size={18} className="w-9 h-9" />
                     <div>
                       <p className="text-xs font-semibold text-gray-800 leading-tight">{item.name}</p>
                       <p className="text-[10px] text-gray-400">{item.sku}</p>
