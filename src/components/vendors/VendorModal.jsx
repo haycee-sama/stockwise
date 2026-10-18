@@ -1,5 +1,5 @@
 // src/components/vendors/VendorModal.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Truck, Loader2, Plus, Minus, CheckCircle } from 'lucide-react';
 import { vendorCategories, vendorAvatarColors } from '../../data/mockData';
 
@@ -36,32 +36,18 @@ const emptyForm = {
 };
 
 export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
-  const [form, setForm]     = useState(emptyForm);
+  // Lazy initialiser — derives from `editVendor` if present.
+  // Combined with a `key` prop on the caller side, this replaces
+  // the previous effect-driven form sync (which fired `setState`
+  // inside `useEffect` and triggered cascading renders —
+  // react-hooks/set-state-in-effect).
+  const [form, setForm]     = useState(() => editVendor
+    ? { name: editVendor.name ?? '', contactPerson: editVendor.contactPerson ?? '', email: editVendor.email ?? '', phone: editVendor.phone ?? '', category: editVendor.category ?? '', location: editVendor.location ?? '', leadTimeDays: editVendor.leadTimeDays ?? '', note: editVendor.note ?? '', itemsSupplied: (editVendor.itemsSupplied?.length ? editVendor.itemsSupplied : ['']) }
+    : { ...emptyForm });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!editVendor;
-
-  useEffect(() => {
-    if (editVendor) {
-      setForm({
-        name:          editVendor.name          ?? '',
-        contactPerson: editVendor.contactPerson ?? '',
-        email:         editVendor.email         ?? '',
-        phone:         editVendor.phone         ?? '',
-        category:      editVendor.category      ?? '',
-        location:      editVendor.location      ?? '',
-        leadTimeDays:  editVendor.leadTimeDays  ?? '',
-        note:          editVendor.note          ?? '',
-        itemsSupplied: editVendor.itemsSupplied?.length
-          ? editVendor.itemsSupplied
-          : [''],
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setErrors({});
-  }, [editVendor, isOpen]);
 
   if (!isOpen) return null;
 

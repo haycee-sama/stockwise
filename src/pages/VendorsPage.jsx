@@ -321,7 +321,7 @@ export default function VendorsPage() {
         )}
       </main>
 
-      <VendorModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editVendor={editVendor} />
+      <VendorModal key={editVendor?.id ?? 'new'} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editVendor={editVendor} />
       <VendorDrawer vendor={drawer} onClose={() => setDrawer(null)} onEdit={() => openEdit(drawer)} onPlaceOrder={() => openOrder(drawer)} />
       <VendorDeleteModal isOpen={deleteModal.open} vendor={deleteModal.vendor} onClose={() => setDeleteModal({ open: false, vendor: null })} onConfirm={handleDelete} />
       <PlaceOrderModal isOpen={orderModal.open} vendor={orderModal.vendor} onClose={() => setOrderModal({ open: false, vendor: null })} onSave={handlePlaceOrder} />

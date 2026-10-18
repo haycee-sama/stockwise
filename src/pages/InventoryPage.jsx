@@ -147,7 +147,7 @@ function ItemCard({ item, onEdit, onDelete, selected, onSelect }) {
 }
 
 // ── Sortable Table Header ─────────────────────────
-function SortTh({ col, label, sortBy, sortDir, onSort }) {
+function SortTh({ col, label, sortBy, onSort }) {
   const active = sortBy === col;
   return (
     <th onClick={() => onSort(col)}
@@ -590,6 +590,7 @@ export default function InventoryPage() {
 
       {/* ── Modals ── */}
       <ItemModal
+        key={editItem?.id ?? 'new'}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSave={handleSave}

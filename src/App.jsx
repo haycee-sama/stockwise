@@ -1,21 +1,27 @@
 // src/App.jsx
-import { lazy, Suspense, useCallback } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import Sidebar from './components/layout/Sidebar';
 import MobileNav from './components/layout/MobileNav';
 import { Package } from 'lucide-react';
 
 // ── Lazy page imports ─────────────────────────────
-const LoginPage     = lazy(() => import('./pages/auth/LoginPage'));
-const SignupPage    = lazy(() => import('./pages/auth/SignupPage'));
-const DashboardPage = lazy(() => import('./pages/DashboardPage'));
-const InventoryPage = lazy(() => import('./pages/InventoryPage'));
-const SalesPage     = lazy(() => import('./pages/SalesPage'));
-const CustomersPage = lazy(() => import('./pages/CustomersPage'));
-const VendorsPage   = lazy(() => import('./pages/VendorsPage'));
-const ExpensesPage  = lazy(() => import('./pages/ExpensesPage'));
-const ReportsPage   = lazy(() => import('./pages/ReportsPage'));
+const LoginPage          = lazy(() => import('./pages/auth/LoginPage'));
+const SignupPage         = lazy(() => import('./pages/auth/SignupPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
+const DashboardPage     = lazy(() => import('./pages/DashboardPage'));
+const InventoryPage     = lazy(() => import('./pages/InventoryPage'));
+const SalesPage         = lazy(() => import('./pages/SalesPage'));
+const CustomersPage     = lazy(() => import('./pages/CustomersPage'));
+const VendorsPage       = lazy(() => import('./pages/VendorsPage'));
+const ExpensesPage      = lazy(() => import('./pages/ExpensesPage'));
+const ReportsPage       = lazy(() => import('./pages/ReportsPage'));
+const SettingsPage      = lazy(() => import('./pages/SettingsPage'));
+const DocumentsPage    = lazy(() => import('./pages/DocumentsPage'));
+const NotFoundPage      = lazy(() => import('./pages/NotFoundPage'));
 
 // ── Page loading spinner ──────────────────────────
 function PageLoader() {
@@ -45,11 +51,14 @@ function AppLayout() {
         <Sidebar />
       </div>
 
-      {/* Main content */}
+      {/* Main content — wrapped in an error boundary so a crash in one
+          page does not blank out the whole app (P2-001 fix). */}
       <div className="flex-1 overflow-x-hidden min-w-0">
-        <Suspense fallback={<PageLoader />}>
-          <Outlet />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
       </div>
 
       {/* Mobile bottom nav */}
@@ -59,13 +68,20 @@ function AppLayout() {
 }
 
 // ── Route guards ──────────────────────────────────
+//
+// P1-001 fix: show a loader while the auth state is being restored
+// on mount. Without this, `ProtectedRoute` would render a `<Navigate
+// to="/login">` on first paint even when there IS a stored session,
+// because `user` is null until `useEffect` in AuthProvider completes.
 function ProtectedRoute() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <PageLoader />;
   return user ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 function AuthRoute({ children }) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <PageLoader />;
   return !user ? children : <Navigate to="/dashboard" replace />;
 }
 
@@ -78,6 +94,7 @@ function AppRoutes() {
       {/* Public auth routes */}
       <Route path="/login"  element={<AuthRoute><Suspense fallback={<PageLoader />}><LoginPage  /></Suspense></AuthRoute>} />
       <Route path="/signup" element={<AuthRoute><Suspense fallback={<PageLoader />}><SignupPage /></Suspense></AuthRoute>} />
+      <Route path="/forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPasswordPage /></Suspense>} />
 
       {/* Protected app routes */}
       <Route element={<ProtectedRoute />}>
@@ -89,11 +106,13 @@ function AppRoutes() {
           <Route path="/vendors"   element={<VendorsPage   />} />
           <Route path="/expenses"  element={<ExpensesPage  />} />
           <Route path="/reports"   element={<ReportsPage   />} />
+          <Route path="/settings"  element={<SettingsPage  />} />
+          <Route path="/documents" element={<DocumentsPage />} />
         </Route>
       </Route>
 
-      {/* 404 fallback */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* 404 — proper page instead of silent redirect to /dashboard (P3-008 fix). */}
+      <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense>} />
     </Routes>
   );
 }
@@ -102,7 +121,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   );

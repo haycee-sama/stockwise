@@ -1,11 +1,18 @@
 // src/components/expenses/ExpenseDeleteModal.jsx
-import { Trash2 } from 'lucide-react';
+import { Trash2, Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench } from 'lucide-react';
 import { expenseCategories } from '../../data/mockData';
+
+// P2-007 fix: the mock expense categories have a lowercase `icon`
+// field (Lucide name string), NOT an `emoji` field. Map the string to
+// the actual Lucide component, mirroring the pattern used in
+// ExpenseModal.jsx.
+const iconMap = { Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench };
 
 export default function ExpenseDeleteModal({ isOpen, expense, onClose, onConfirm }) {
   if (!isOpen || !expense) return null;
 
   const cat = expenseCategories.find(c => c.id === expense.category);
+  const CatIcon = cat ? (iconMap[cat.icon] ?? Wrench) : Wrench;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -21,9 +28,9 @@ export default function ExpenseDeleteModal({ isOpen, expense, onClose, onConfirm
         </p>
         {/* Expense preview */}
         <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 mb-5">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: cat?.bg ?? '#f3f4f6' }}>
-            {cat?.emoji ?? '🔧'}
+            <CatIcon size={18} style={{ color: cat?.color ?? '#6b7280' }} />
           </div>
           <div className="flex-1">
             <p className="text-sm font-bold text-gray-800">{expense.name}</p>

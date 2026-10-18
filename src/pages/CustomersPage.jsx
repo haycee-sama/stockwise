@@ -400,7 +400,7 @@ export default function CustomersPage() {
         )}
       </main>
 
-      <CustomerModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editCustomer={editCustomer} />
+      <CustomerModal key={editCustomer?.id ?? 'new'} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editCustomer={editCustomer} />
       <CustomerDrawer customer={drawer} onClose={() => setDrawer(null)} onEdit={() => openEdit(drawer)} />
       <CustomerDeleteModal isOpen={deleteModal.open} customer={deleteModal.customer} onClose={() => setDeleteModal({ open: false, customer: null })} onConfirm={handleDelete} />
     </div>
