@@ -87,28 +87,52 @@ begin
     end if;
 
     -- 5a. Look up the inventory item by (business_id, name).
-    --     If it doesn't exist, create it with a default category.
-    select id, name, category into v_inv_id, v_inv_name, v_inv_category
-      from public.sw_inventory_items
-     where business_id = v_po.business_id
-       and name = v_item.item_name
-       and deleted_at is null
-    for update;
+    --     FIX (Phase 3F review): the original code used SELECT INTO which
+    --     silently picks one row if multiple match. Two distinct products
+    --     could share the same name (e.g., "Ankara Gown (M)" from
+    --     different suppliers). Matching by name can accidentally merge
+    --     distinct products and increment stock on the wrong item.
+    --
+    --     Fix: check the match count first. If >1 match, raise an error
+    --     requiring manual resolution. If exactly 1, use it. If 0,
+    --     create a new inventory item.
+    declare
+      v_match_count integer;
+    begin
+      select count(*) into v_match_count
+        from public.sw_inventory_items
+       where business_id = v_po.business_id
+         and name = v_item.item_name
+         and deleted_at is null;
 
-    if not found then
-      -- Create a new inventory item. The cost_price is set to the
-      -- PO's unit_price; the selling_price is set to cost_price * 1.5
-      -- as a default margin (the user can edit later).
-      insert into public.sw_inventory_items
-        (business_id, name, sku, category, supplier_id, stock, threshold,
-         cost_price, selling_price, last_restocked)
-      values
-        (v_po.business_id, v_item.item_name,
-         'AUTO-' || upper(left(md5(v_item.item_name || ':' || v_po.business_id::text), 8)),
-         'Other', null, 0, 0,
-         v_item.unit_price, v_item.unit_price * 1.5, current_date)
-      returning id, name, category into v_inv_id, v_inv_name, v_inv_category;
-    end if;
+      if v_match_count > 1 then
+        raise exception
+          'Multiple inventory items match name "%" in business %. Cannot auto-resolve — please manually link this PO line item to a specific inventory item.',
+          v_item.item_name, v_po.business_id;
+      end if;
+
+      if v_match_count = 1 then
+        select id, name, category into v_inv_id, v_inv_name, v_inv_category
+          from public.sw_inventory_items
+         where business_id = v_po.business_id
+           and name = v_item.item_name
+           and deleted_at is null
+        for update;
+      else
+        -- v_match_count = 0 — create a new inventory item.
+        -- The cost_price is set to the PO's unit_price; the selling_price
+        -- is set to cost_price * 1.5 as a default margin.
+        insert into public.sw_inventory_items
+          (business_id, name, sku, category, supplier_id, stock, threshold,
+           cost_price, selling_price, last_restocked)
+        values
+          (v_po.business_id, v_item.item_name,
+           'AUTO-' || upper(left(md5(v_item.item_name || ':' || v_po.business_id::text), 8)),
+           'Other', null, 0, 0,
+           v_item.unit_price, v_item.unit_price * 1.5, current_date)
+        returning id, name, category into v_inv_id, v_inv_name, v_inv_category;
+      end if;
+    end;
 
     -- 5b. Increment the inventory stock.
     update public.sw_inventory_items
