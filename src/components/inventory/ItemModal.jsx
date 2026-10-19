@@ -1,7 +1,9 @@
 // src/components/inventory/ItemModal.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Package, Loader2, CheckCircle } from 'lucide-react';
-import { categories, suppliers } from '../../data/mockData';
+import { categories } from '../../data/mockData';
+import { vendorsService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
 import { iconOptions, iconMap } from '../../utils/inventoryIconData';
 
 // ── Reusable Field wrapper ────────────────────────
@@ -94,6 +96,16 @@ const bgOptions = [
 ];
 
 export default function ItemModal({ isOpen, onClose, onSave, editItem }) {
+  const { activeBusinessId } = useBusiness();
+  const [suppliers, setSuppliers] = useState([]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await vendorsService.list({ businessId: activeBusinessId ?? undefined });
+      if (active && data) setSuppliers(data.map(v => v.name));
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
   // Lazy initialiser — derives from `editItem` if present.
   // Combined with a `key` prop on the caller side, this replaces
   // the previous effect-driven form sync (which fired `setState`

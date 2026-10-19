@@ -1,10 +1,10 @@
 // src/components/dashboard/StockDonut.jsx
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { stockStatusData as fallbackData } from '../../data/mockData';
 import { dashboardService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
 import { useState, useEffect } from 'react';
 import { Package } from 'lucide-react';
+import { LoadingState, ErrorState } from '../common/ResourceState';
 
 function CustomTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -18,13 +18,18 @@ function CustomTooltip({ active, payload }) {
 
 export default function StockDonut() {
   const { activeBusinessId } = useBusiness();
-  const [stockData, setStockData] = useState(fallbackData);
+  const [stockData, setStockData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data: svcData } = await dashboardService.stockStatus({ businessId: activeBusinessId });
-      if (active && svcData) {
+      setLoading(true); setError(null);
+      const { data: svcData, error: svcError } = await dashboardService.stockStatus({ businessId: activeBusinessId });
+      if (!active) return;
+      if (svcError) { setError(svcError); setStockData(null); }
+      else if (svcData) {
         // Map the service's { In Stock, Low Stock, Out of Stock, total } shape
         // to the chart's [{ name, value, color }] shape.
         const colors = { 'In Stock': '#16a34a', 'Low Stock': '#f59e0b', 'Out of Stock': '#ef4444' };
@@ -34,9 +39,17 @@ export default function StockDonut() {
     return () => { active = false; };
   }, [activeBusinessId]);
 
-  const total = stockData.reduce((s, d) => s + d.value, 0);
-  const inStockPct = Math.round((stockData[0].value / total) * 100);
+  const total = (stockData ?? []).reduce((s, d) => s + d.value, 0);
+  const inStockPct = Math.round(((stockData ?? [])[0]?.value ?? 0 / total) * 100);
 
+  if (loading) return <LoadingState label="Loading stock status…" />;
+  if (error) return <ErrorState error={error} />;
+  if (!stockData || stockData.length === 0) return (
+    <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-250">
+      <h3 className="text-sm font-bold text-gray-900">Stock Status</h3>
+      <p className="text-xs text-gray-400 mt-4">No stock data yet.</p>
+    </div>
+  );
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-250">
       <div className="flex items-start justify-between mb-4">
@@ -56,12 +69,12 @@ export default function StockDonut() {
         <ResponsiveContainer width="100%" height={170}>
           <PieChart>
             <Pie
-              data={stockData}
+              data={stockData ?? []}
               cx="50%" cy="50%"
               innerRadius={52} outerRadius={76}
               paddingAngle={3} dataKey="value" strokeWidth={0}
             >
-              {stockData.map(e => <Cell key={e.name} fill={e.color} />)}
+              {(stockData ?? []).map(e => <Cell key={e.name} fill={e.color} />)}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
           </PieChart>
@@ -78,7 +91,7 @@ export default function StockDonut() {
 
       {/* Legend */}
       <div className="mt-3 space-y-2">
-        {stockData.map(item => {
+        {(stockData ?? []).map(item => {
           const pct = ((item.value / total) * 100).toFixed(0);
           return (
             <div key={item.name} className="flex items-center gap-2">

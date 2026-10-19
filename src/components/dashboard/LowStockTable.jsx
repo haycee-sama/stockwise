@@ -1,23 +1,36 @@
 // src/components/dashboard/LowStockTable.jsx
 import { ArrowRight, AlertTriangle, ShoppingCart, Package } from 'lucide-react';
-import { lowStockItems as fallbackData } from '../../data/mockData';
 import { dashboardService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
 import { useState, useEffect } from 'react';
 
 export default function LowStockTable() {
   const { activeBusinessId } = useBusiness();
-  const [items, setItems] = useState(fallbackData);
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data: svcData } = await dashboardService.lowStockList({ businessId: activeBusinessId });
-      if (active && svcData && svcData.length > 0) setItems(svcData);
+      setLoading(true); setError(null);
+      const { data: svcData, error: svcError } = await dashboardService.lowStockList({ businessId: activeBusinessId });
+      if (!active) return;
+      if (svcError) { setError(svcError); setItems(null); }
+      else { setItems(svcData ?? []); }
+      setLoading(false);
     })();
     return () => { active = false; };
   }, [activeBusinessId]);
 
+  if (loading) return <LoadingState label="Loading low stock…" />;
+  if (error) return <ErrorState error={error} />;
+  if (!items || items.length === 0) return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-350">
+      <div className="px-5 sm:px-6 py-4 border-b border-gray-100"><h3 className="text-sm font-bold text-gray-900">Low Stock Alerts</h3></div>
+      <div className="py-8 text-center text-gray-400 text-sm">All items are well stocked.</div>
+    </div>
+  );
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-350">
       {/* Header */}
@@ -50,7 +63,7 @@ export default function LowStockTable() {
             </tr>
           </thead>
           <tbody>
-            {items.map(item => {
+            {(items ?? []).map(item => {
               const pct        = Math.min((item.stock / item.threshold) * 100, 100);
               const isCritical = item.status === 'critical';
 

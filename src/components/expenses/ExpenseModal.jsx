@@ -1,11 +1,13 @@
 // src/components/expenses/ExpenseModal.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X, Receipt, Loader2, Plus, CheckCircle,
   Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench,
   Banknote, Building2, CreditCard,
 } from 'lucide-react';
-import { expenseCategories, expensePaymentMethods, vendorsData } from '../../data/mockData';
+import { expenseCategories, expensePaymentMethods } from '../../data/mockData';
+import { vendorsService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
 
 const iconMap = { Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench };
 const pmtIcons = { Cash: Banknote, Transfer: Building2, Card: CreditCard };
@@ -42,6 +44,16 @@ const emptyForm = {
 };
 
 export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
+  const { activeBusinessId } = useBusiness();
+  const [vendorSuggestions, setVendorSuggestions] = useState([]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await vendorsService.list({ businessId: activeBusinessId ?? undefined });
+      if (active && data) setVendorSuggestions(data.map(v => v.name));
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
   // Lazy initialiser — derives from `editExpense` if present.
   // Replaces the previous effect-driven form sync (which fired
   // `setState` inside `useEffect` and triggered cascading renders —
@@ -100,7 +112,6 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
   const SelectedCatIcon = selectedCat ? (iconMap[selectedCat.icon] ?? Wrench) : null;
 
   // Vendor suggestions from vendorsData
-  const vendorSuggestions = vendorsData.map(v => v.name);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">

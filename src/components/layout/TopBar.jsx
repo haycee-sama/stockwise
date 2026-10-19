@@ -3,12 +3,7 @@ import { useState } from 'react';
 import { Bell, Search, Menu, X, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 
-const notifications = [
-  { id: 1, title: 'Low Stock Alert',     body: 'Sun Hat is down to 3 units',       time: '5m ago',  unread: true,  color: 'bg-amber-500' },
-  { id: 2, title: 'New Sale Recorded',   body: 'Chidinma Eze — ₦23,500',           time: '32m ago', unread: true,  color: 'bg-green-500' },
-  { id: 3, title: 'Order Delivered',     body: 'PO-024 from Lagos Fashion Hub',     time: '2h ago',  unread: false, color: 'bg-blue-500'  },
-  { id: 4, title: 'Stock Alert',         body: 'Stiletto Heels — only 4 remaining', time: '4h ago',  unread: false, color: 'bg-amber-500' },
-];
+const notifications = []; // No persisted notification system yet
 
 export default function TopBar({ title, subtitle, actions }) {
   const { user } = useAuth();
@@ -63,7 +58,7 @@ export default function TopBar({ title, subtitle, actions }) {
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Search (coming soon)" disabled
                 className="pl-9 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all w-44 lg:w-56"
               />
             </div>
@@ -146,7 +141,7 @@ export default function TopBar({ title, subtitle, actions }) {
           <div className="md:hidden px-4 pb-3 animate-fade-up">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input autoFocus type="text" placeholder="Search anything..."
+              <input autoFocus type="text" placeholder="Search (coming soon)" disabled
                 className="w-full pl-9 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-green-400 transition-all" />
             </div>
           </div>

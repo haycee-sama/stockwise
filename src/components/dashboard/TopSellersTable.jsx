@@ -1,10 +1,10 @@
 // src/components/dashboard/TopSellersTable.jsx
 import { ArrowRight, TrendingUp, TrendingDown, ShoppingBag } from 'lucide-react';
-import { topSellers as fallbackData } from '../../data/mockData';
 import { dashboardService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
 import { useState, useEffect } from 'react';
 import { ItemIcon } from '../../utils/inventoryIcons';
+import { LoadingState, ErrorState } from '../common/ResourceState';
 
 function formatNaira(v) {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -16,17 +16,31 @@ const rankColors = ['text-amber-500', 'text-gray-400', 'text-orange-400'];
 
 export default function TopSellersTable() {
   const { activeBusinessId } = useBusiness();
-  const [items, setItems] = useState(fallbackData);
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data: svcData } = await dashboardService.topSellersList({ businessId: activeBusinessId });
-      if (active && svcData && svcData.length > 0) setItems(svcData);
+      setLoading(true); setError(null);
+      const { data: svcData, error: svcError } = await dashboardService.topSellersList({ businessId: activeBusinessId });
+      if (!active) return;
+      if (svcError) { setError(svcError); setItems(null); }
+      else { setItems(svcData ?? []); }
+      setLoading(false);
     })();
     return () => { active = false; };
   }, [activeBusinessId]);
 
+  if (loading) return <LoadingState label="Loading top sellers…" />;
+  if (error) return <ErrorState error={error} />;
+  if (!items || items.length === 0) return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-300">
+      <div className="px-5 sm:px-6 py-4 border-b border-gray-100"><h3 className="text-sm font-bold text-gray-900">Top Sellers</h3></div>
+      <div className="py-8 text-center text-gray-400 text-sm">No sales data yet.</div>
+    </div>
+  );
   return (
     // use `items` instead of `topSellers`
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-300">
@@ -61,7 +75,7 @@ export default function TopSellersTable() {
             </tr>
           </thead>
           <tbody>
-            {items.map((item, i) => (
+            {(items ?? []).map((item, i) => (
               <tr key={item.id}
                 className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors group">
                 {/* Rank */}
