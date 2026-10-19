@@ -255,6 +255,7 @@ export default function SalesPage() {
     const payload = {
       businessId: activeBusinessId,
       customerName: order.customer?.name,
+      customerId: order.customerId ?? null,
       items: order.items.map(i => ({
         itemId:    i.itemId,
         name:      i.name,

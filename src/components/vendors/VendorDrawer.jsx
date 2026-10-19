@@ -32,7 +32,7 @@ function OrderStatusBadge({ status }) {
   );
 }
 
-export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder }) {
+export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder, onReceive }) {
   if (!vendor) return null;
 
   return (
@@ -191,6 +191,15 @@ export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder }) 
                     <p className="text-sm font-extrabold text-gray-900 flex-shrink-0">
                       {naira(order.total)}
                     </p>
+                    {order.status === 'pending' && onReceive && (
+                      <button
+                        onClick={() => onReceive(order.id)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-white bg-green-600 hover:bg-green-700 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 flex-shrink-0"
+                        title="Receive this purchase order — increments inventory + writes stock ledger"
+                      >
+                        <CheckCircle size={11} /> Receive
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

@@ -121,3 +121,23 @@ export async function listStatuses()   { return { data: vendorStatuses.filter(s 
 export function __resetForTests() {
   workingVendors = mockVendors.map(v => ({ ...v }));
 }
+
+// Mock receive purchase order — in demo mode, just marks the PO as
+// delivered + increments vendor's totalPaid. Does NOT touch inventory
+// (no sw_inventory_items table in demo mode).
+export async function receivePurchaseOrder(purchaseOrderId) {
+  await delay(300);
+  let updated = null;
+  workingVendors = workingVendors.map(v => {
+    const poIdx = (v.orders ?? []).findIndex(o => o.id === purchaseOrderId);
+    if (poIdx >= 0) {
+      const newOrders = [...v.orders];
+      newOrders[poIdx] = { ...newOrders[poIdx], status: 'delivered' };
+      updated = newOrders[poIdx];
+      return { ...v, orders: newOrders, totalPaid: v.totalPaid + newOrders[poIdx].total, pendingAmount: Math.max(0, v.pendingAmount - newOrders[poIdx].total) };
+    }
+    return v;
+  });
+  if (!updated) return { data: null, error: { code: 'NOT_FOUND', message: 'Purchase order not found' } };
+  return { data: { purchase_order_id: purchaseOrderId, status: 'delivered', items_processed: 1, total_qty_received: 0 }, error: null };
+}

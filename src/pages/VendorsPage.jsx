@@ -249,6 +249,30 @@ export default function VendorsPage() {
     }));
   }, []);
 
+  // Receive a purchase order — calls vendorsService.receivePurchaseOrder.
+  // In demo mode: mock service marks the PO as delivered.
+  // In Supabase mode: calls the sw_receive_purchase_order RPC (requires
+  // migration 0004 to be applied — see docs/SUPABASE_SETUP.md).
+  // On success, updates the vendor's orders in local state.
+  const handleReceive = useCallback(async (poId) => {
+    const { error: svcErr } = await vendorsService.receivePurchaseOrder(poId);
+    if (svcErr) {
+      console.error('[VendorsPage] receive PO failed:', svcErr);
+      alert(`Could not receive purchase order: ${svcErr.message}`);
+      return;
+    }
+    // Update the vendor's orders in local state.
+    setVendors(prev => prev.map(v => {
+      const poIdx = (v.orders ?? []).findIndex(o => o.id === poId);
+      if (poIdx < 0) return v;
+      const newOrders = [...v.orders];
+      newOrders[poIdx] = { ...newOrders[poIdx], status: 'delivered' };
+      return { ...v, orders: newOrders, totalPaid: v.totalPaid + newOrders[poIdx].total, pendingAmount: Math.max(0, v.pendingAmount - newOrders[poIdx].total) };
+    }));
+    // Also refresh the full vendor list to get updated PO statuses.
+    fetchVendors();
+  }, [fetchVendors]);
+
   const headerActions = (
     <>
       <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
@@ -386,7 +410,7 @@ export default function VendorsPage() {
       </main>
 
       <VendorModal key={editVendor?.id ?? 'new'} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editVendor={editVendor} />
-      <VendorDrawer vendor={drawer} onClose={() => setDrawer(null)} onEdit={() => openEdit(drawer)} onPlaceOrder={() => openOrder(drawer)} />
+      <VendorDrawer vendor={drawer} onClose={() => setDrawer(null)} onEdit={() => openEdit(drawer)} onPlaceOrder={() => openOrder(drawer)} onReceive={handleReceive} />
       <VendorDeleteModal isOpen={deleteModal.open} vendor={deleteModal.vendor} onClose={() => setDeleteModal({ open: false, vendor: null })} onConfirm={handleDelete} />
       <PlaceOrderModal isOpen={orderModal.open} vendor={orderModal.vendor} onClose={() => setOrderModal({ open: false, vendor: null })} onSave={handlePlaceOrder} />
     </div>

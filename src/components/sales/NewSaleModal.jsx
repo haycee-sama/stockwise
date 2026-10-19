@@ -7,6 +7,7 @@ import {
   Package, CheckCircle, ArrowLeft,
 } from 'lucide-react';
 import { inventoryService } from '../../services';
+import { customersService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
 import { ItemIcon } from '../../utils/inventoryIcons';
 
@@ -58,6 +59,10 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   const [cart, setCart]         = useState([]);
   const [search, setSearch]     = useState('');
   const [customer, setCustomer] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [customerList, setCustomerList] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [payment, setPayment]   = useState('Cash');
   const [note, setNote]         = useState('');
   const [errors, setErrors]     = useState({});
@@ -75,6 +80,41 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
     return () => { active = false; };
   }, [activeBusinessId]);
 
+  // Fetch customers for the customer picker.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await customersService.list({ businessId: activeBusinessId ?? undefined });
+      if (active && data) setCustomerList(data);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  // Filtered customers for the dropdown.
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch.trim()) return customerList.slice(0, 5);
+    const q = customerSearch.toLowerCase();
+    return customerList.filter(c =>
+      `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
+      (c.phone ?? '').includes(q) ||
+      (c.email ?? '').toLowerCase().includes(q)
+    ).slice(0, 5);
+  }, [customerSearch, customerList]);
+
+  // Handle selecting a customer from the dropdown.
+  const selectCustomer = useCallback((c) => {
+    setCustomer(`${c.firstName} ${c.lastName}`);
+    setSelectedCustomerId(c.id);
+    setShowCustomerDropdown(false);
+    setCustomerSearch('');
+    if (errors.customer) setErrors(p => ({ ...p, customer: '' }));
+  }, [errors.customer]);
+
+  // Handle clearing the customer selection (revert to walk-in / free-text).
+  const clearCustomerSelection = useCallback(() => {
+    setSelectedCustomerId(null);
+  }, []);
+
   const filteredInventory = useMemo(() => {
     const q = search.toLowerCase();
     return inventoryItems.filter(i =>
@@ -86,8 +126,9 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   }, [search, inventoryItems]);
 
   const clearCartState = useCallback(() => {
-    setCart([]); setCustomer(''); setPayment('Cash');
-    setNote(''); setStep(1); setSearch(''); setErrors({});
+    setCart([]); setCustomer(''); setSelectedCustomerId(null);
+    setCustomerSearch(''); setShowCustomerDropdown(false);
+    setPayment('Cash'); setNote(''); setStep(1); setSearch(''); setErrors({});
   }, []);
 
   const removeFromCart = useCallback((id) => {
@@ -157,6 +198,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
           color:     '#f0fdf4',
           textColor: '#15803d',
         },
+        customerId: selectedCustomerId, // UUID for a known customer, null for walk-in
         items: cart.map(c => ({
           itemId:     c.id,
           name:       c.name,
@@ -329,20 +371,75 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
               <div className="p-3 border-t border-gray-100 space-y-3 flex-shrink-0">
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
-                    Customer Name <span className="text-red-400">*</span>
+                    Customer {selectedCustomerId && <span className="text-green-500 normal-case">✓ linked</span>}
+                    {!selectedCustomerId && <span className="text-red-400">*</span>}
                   </label>
                   <div className="relative">
-                    <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input value={customer}
-                      onChange={e => { setCustomer(e.target.value); if (errors.customer) setErrors(p => ({ ...p, customer: '' })); }}
-                      placeholder="e.g. Amaka Okonkwo"
+                    <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <input
+                      value={customer}
+                      onChange={(e) => {
+                        setCustomer(e.target.value);
+                        if (selectedCustomerId) clearCustomerSelection();
+                        setCustomerSearch(e.target.value);
+                        setShowCustomerDropdown(true);
+                        if (errors.customer) setErrors(p => ({ ...p, customer: '' }));
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                      placeholder="Search customer or type walk-in name…"
                       className={`w-full pl-8 pr-3 py-2.5 text-sm rounded-xl border outline-none transition-all
                         ${errors.customer
                           ? 'border-red-300 bg-red-50'
-                          : 'border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100'
+                          : selectedCustomerId
+                            ? 'border-green-300 bg-green-50'
+                            : 'border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100'
                         }`}
                     />
+                    {/* Customer suggestions dropdown */}
+                    {showCustomerDropdown && filteredCustomers.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto">
+                        {filteredCustomers.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); selectCustomer(c); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-green-50 transition-colors text-left"
+                          >
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                              style={{ background: c.color, color: c.textColor }}>
+                              {c.initials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-800 truncate">
+                                {c.firstName} {c.lastName}
+                              </p>
+                              <p className="text-[10px] text-gray-400 truncate">{c.phone}</p>
+                            </div>
+                            <span className="text-[9px] font-bold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                              {c.type}
+                            </span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setShowCustomerDropdown(false);
+                            setSelectedCustomerId(null);
+                          }}
+                          className="w-full text-center py-2 text-[10px] font-semibold text-gray-400 hover:bg-gray-50 border-t border-gray-100"
+                        >
+                          Use as walk-in customer (no link)
+                        </button>
+                      </div>
+                    )}
                   </div>
+                  {selectedCustomerId && (
+                    <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+                      <CheckCircle size={10} /> Customer linked — sale will be recorded against this customer.
+                    </p>
+                  )}
                   {errors.customer && (
                     <p className="text-[11px] text-red-500 mt-1">⚠ {errors.customer}</p>
                   )}

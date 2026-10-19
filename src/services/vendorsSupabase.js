@@ -240,3 +240,16 @@ export async function listCategories() {
 export async function listStatuses() {
   return { data: ['Active', 'Inactive'], error: null };
 }
+
+// Receive a purchase order — calls the sw_receive_purchase_order RPC.
+// The RPC is defined in supabase/migrations/0004_sw_receive_purchase_order.sql.
+// NOT YET APPLIED to the dev project — the user must apply it via the
+// SQL Editor before this method will work.
+export async function receivePurchaseOrder(purchaseOrderId) {
+  if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
+  const { data, error } = await supabase.rpc('sw_receive_purchase_order', {
+    p_purchase_order_id: purchaseOrderId,
+  });
+  if (error) return { data: null, error: { code: error.code, message: error.message } };
+  return { data, error: null };
+}
