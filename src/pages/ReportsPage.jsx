@@ -584,7 +584,7 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all shadow-sm">
+      <button disabled title="Coming soon — PDF export is not yet implemented" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Download size={14} /><span className="hidden sm:inline">Export PDF</span>
       </button>
     </>

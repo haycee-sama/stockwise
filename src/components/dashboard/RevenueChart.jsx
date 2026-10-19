@@ -3,11 +3,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { revenueData as fallbackData } from '../../data/mockData';
 import { dashboardService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
 import { useState, useEffect } from 'react';
 import { TrendingUp } from 'lucide-react';
+import { LoadingState, ErrorState } from '../common/ResourceState';
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -31,13 +31,19 @@ function CustomTooltip({ active, payload, label }) {
 export default function RevenueChart() {
   const { activeBusinessId } = useBusiness();
   const [period, setPeriod] = useState('week');
-  const [data, setData] = useState(fallbackData);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data: svcData } = await dashboardService.revenue({ businessId: activeBusinessId });
-      if (active && svcData?.data) setData(svcData.data);
+      setLoading(true); setError(null);
+      const { data: svcData, error: svcError } = await dashboardService.revenue({ businessId: activeBusinessId });
+      if (!active) return;
+      if (svcError) { setError(svcError); setData(null); }
+      else { setData(svcData?.data ?? []); }
+      setLoading(false);
     })();
     return () => { active = false; };
   }, [activeBusinessId]);
@@ -46,6 +52,14 @@ export default function RevenueChart() {
   const lastTotal = data.reduce((s, d) => s + d.lastWeek, 0);
   const growth    = (((total - lastTotal) / lastTotal) * 100).toFixed(1);
 
+  if (loading) return <LoadingState label="Loading revenue…" />;
+  if (error) return <ErrorState error={error} />;
+  if (!data || data.length === 0) return (
+    <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-200">
+      <h3 className="text-sm font-bold text-gray-900">Revenue Overview</h3>
+      <p className="text-xs text-gray-400 mt-4">No revenue data yet.</p>
+    </div>
+  );
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-200">
       {/* Header */}

@@ -14,9 +14,10 @@ import StockDonut      from '../components/dashboard/StockDonut';
 import TopSellersTable from '../components/dashboard/TopSellersTable';
 import LowStockTable   from '../components/dashboard/LowStockTable';
 import DemoModeBanner  from '../components/common/DemoModeBanner';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
 import { useAuth }     from '../context/useAuth';
 import { dashboardService } from '../services';
-import { dashboardStats as fallbackStats, pendingOrders, salesData, inventoryItems } from '../data/mockData';
+import { dashboardStats as demoStats } from '../data/mockData';
 import { useBusiness } from '../context/useBusiness';
 
 // ── Helpers ──────────────────────────────────────
@@ -106,7 +107,47 @@ export default function DashboardPage() {
     })();
     return () => { active = false; };
   }, [activeBusinessId]);
-  const [orders, setOrders]       = useState(pendingOrders);
+
+  // Fetch pending orders from service (replaces mock pendingOrders)
+  const [pendingOrdersData, setPendingOrdersData] = useState([]);
+  const [pendingOrdersLoading, setPendingOrdersLoading] = useState(true);
+  const [pendingOrdersError, setPendingOrdersError] = useState(null);
+
+  // Fetch recent sales from service (replaces mock salesData for recent activity)
+  const [recentSalesData, setRecentSalesData] = useState([]);
+  const [recentSalesLoading, setRecentSalesLoading] = useState(true);
+  const [recentSalesError, setRecentSalesError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setPendingOrdersLoading(true);
+      setPendingOrdersError(null);
+      const { data, error } = await dashboardService.pendingOrdersList({ businessId: activeBusinessId });
+      if (!active) return;
+      if (error) {
+        setPendingOrdersError(error);
+        setPendingOrdersData([]);
+      } else {
+        setPendingOrdersData(data ?? []);
+      }
+      setPendingOrdersLoading(false);
+
+      setRecentSalesLoading(true);
+      setRecentSalesError(null);
+      const { data: rsData, error: rsError } = await dashboardService.recentSalesList({ businessId: activeBusinessId });
+      if (!active) return;
+      if (rsError) {
+        setRecentSalesError(rsError);
+        setRecentSalesData([]);
+      } else {
+        setRecentSalesData(rsData ?? []);
+      }
+      setRecentSalesLoading(false);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+  const [orders, setOrders]       = useState([]); // now populated from pendingOrdersData
   const [showFilters, setFilters] = useState(false);
   const [period, setPeriod]       = useState('today');
 
@@ -115,36 +156,23 @@ export default function DashboardPage() {
   // filter sales by today's date. Because mock data is dated March
   // 2026, "Today" and "This Week" will show ₦0 in demo mode. That is
   // accurate, not a bug. In Supabase mode the data will be live.
+  // Live stats now come from summaryStats (fetched from dashboardService.summary())
+  // In demo mode, falls back to demoStats. No mock business records used.
   const liveStats = useMemo(() => {
-    const now       = new Date();
-    const todayStr  = now.toDateString();
-    const weekAgo   = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const completed  = salesData.filter(s => s.status === 'completed');
-    const periodSales = completed.filter(s => {
-      if (period === 'today') return new Date(s.date).toDateString() === todayStr;
-      if (period === 'week')  return new Date(s.date) >= weekAgo;
-      // month
-      return new Date(s.date) >= monthStart;
-    });
-    const outOfStock = inventoryItems.filter(i => i.stock === 0).length;
-    const lowStock   = inventoryItems.filter(i => i.stock > 0 && i.stock <= i.threshold).length;
-
+    const s = summaryStats ?? (isDemoMode ? demoStats : null);
+    if (!s) {
+      return { periodRevenue: 0, periodOrders: 0, outOfStock: 0, lowStock: 0 };
+    }
     return {
-      todayRevenue: period === 'today' ? periodSales.reduce((s, o) => s + o.total, 0) : 0,
-      weekRevenue:  period === 'week'  ? periodSales.reduce((s, o) => s + o.total, 0) : 0,
-      periodRevenue: periodSales.reduce((s, o) => s + o.total, 0),
-      periodOrders: periodSales.length,
-      outOfStock,
-      lowStock,
+      periodRevenue: s.todayRevenue ?? 0,
+      periodOrders: s.pendingOrdersCount ?? 0,
+      outOfStock: s.outOfStock ?? 0,
+      lowStock: s.lowStock ?? 0,
     };
-  }, [period]);
+  }, [summaryStats, isDemoMode, period]);
 
   // Recent sales for the activity feed (latest 4)
-  const recentSales = useMemo(() =>
-    [...salesData].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4),
-  []);
+  const recentSales = recentSalesData;
 
   // ── Handlers ─────────────────────────────────
   const handleFulfil = useCallback((id) => {
@@ -195,11 +223,19 @@ export default function DashboardPage() {
   // user out in demo mode). Instead, re-derive the stats from the
   // in-memory data. In Supabase mode this would re-fetch from the
   // backend.
-  const handleRefresh = useCallback(() => {
-    setOrders(pendingOrders);
-    // Force a re-derive by toggling a noop state.
-    setFilters(s => s);
-  }, []);
+  const handleRefresh = useCallback(async () => {
+    // Re-fetch ALL dashboard data from the service — not from mock data.
+    setFilters(s => s); // trigger re-render
+    // Re-fetch summary
+    const { data: sum } = await dashboardService.summary({ businessId: activeBusinessId });
+    if (sum) setSummaryStats(sum);
+    // Re-fetch pending orders
+    const { data: po } = await dashboardService.pendingOrdersList({ businessId: activeBusinessId });
+    if (po) setPendingOrdersData(po);
+    // Re-fetch recent sales
+    const { data: rs } = await dashboardService.recentSalesList({ businessId: activeBusinessId });
+    if (rs) setRecentSalesData(rs);
+  }, [activeBusinessId]);
 
   // ── TopBar action buttons ─────────────────────
   const headerActions = (
@@ -222,6 +258,8 @@ export default function DashboardPage() {
     </>
   );
 
+  // Sync orders state with service-fetched pending orders
+  useEffect(() => { setOrders(pendingOrdersData); }, [pendingOrdersData]);
   const hasAlerts = liveStats.outOfStock > 0 || liveStats.lowStock > 0;
 
   return (
@@ -262,9 +300,9 @@ export default function DashboardPage() {
             icon={DollarSign}
             iconBg="bg-green-100" iconColor="text-green-600"
             label="Total Gross Sales"
-            value={(summaryStats ?? fallbackStats).totalSales}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {totalSales: 0})).totalSales}
             valueType="currency"
-            change={(summaryStats ?? fallbackStats).salesChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {salesChange: 0})).salesChange}
             changeLabel="vs last month"
             animDelay="0.05s"
           />
@@ -272,9 +310,9 @@ export default function DashboardPage() {
             icon={TrendingUp}
             iconBg="bg-blue-100" iconColor="text-blue-600"
             label="Net Profit"
-            value={(summaryStats ?? fallbackStats).totalProfit}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {totalProfit: 0})).totalProfit}
             valueType="currency"
-            change={(summaryStats ?? fallbackStats).profitChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {profitChange: 0})).profitChange}
             changeLabel="vs last month"
             animDelay="0.10s"
           />
@@ -282,9 +320,9 @@ export default function DashboardPage() {
             icon={Package}
             iconBg="bg-purple-100" iconColor="text-purple-600"
             label="Inventory Items"
-            value={(summaryStats ?? fallbackStats).totalInventory}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {totalInventory: 0})).totalInventory}
             valueType="number"
-            change={(summaryStats ?? fallbackStats).inventoryChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {inventoryChange: 0})).inventoryChange}
             changeLabel="vs last month"
             animDelay="0.15s"
           />
@@ -292,9 +330,9 @@ export default function DashboardPage() {
             icon={AlertCircle}
             iconBg="bg-red-100" iconColor="text-red-500"
             label="Low Stock Alerts"
-            value={(summaryStats ?? fallbackStats).lowStockCount}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {lowStockCount: 0})).lowStockCount}
             valueType="number"
-            change={(summaryStats ?? fallbackStats).lowStockChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {lowStockChange: 0})).lowStockChange}
             changeLabel="new this week"
             animDelay="0.20s"
           />
@@ -403,6 +441,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
 
           {/* Recent Sales */}
+          {recentSalesLoading && <LoadingState label="Loading recent sales…" />}
+          {recentSalesError && <ErrorState error={recentSalesError} />}
+          {!recentSalesLoading && !recentSalesError && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up">
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
@@ -475,8 +516,12 @@ export default function DashboardPage() {
               </table>
             </div>
           </div>
+          )}
 
           {/* Pending Orders */}
+          {pendingOrdersLoading && <LoadingState label="Loading pending orders…" />}
+          {pendingOrdersError && <ErrorState error={pendingOrdersError} />}
+          {!pendingOrdersLoading && !pendingOrdersError && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up">
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
@@ -520,6 +565,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* ── Footer ── */}
@@ -532,7 +578,7 @@ export default function DashboardPage() {
           <span className="hidden sm:block">
             Total sales revenue:{' '}
             <strong className="text-green-600">
-              {naira(salesData.filter(s => s.status === 'completed').reduce((s, o) => s + o.total, 0))}
+              {naira(summaryStats?.totalSales ?? 0)}
             </strong>
           </span>
         </div>
