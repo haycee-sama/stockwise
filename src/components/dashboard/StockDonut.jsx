@@ -1,6 +1,9 @@
 // src/components/dashboard/StockDonut.jsx
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { stockStatusData } from '../../data/mockData';
+import { stockStatusData as fallbackData } from '../../data/mockData';
+import { dashboardService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
+import { useState, useEffect } from 'react';
 import { Package } from 'lucide-react';
 
 function CustomTooltip({ active, payload }) {
@@ -14,8 +17,25 @@ function CustomTooltip({ active, payload }) {
 }
 
 export default function StockDonut() {
-  const total = stockStatusData.reduce((s, d) => s + d.value, 0);
-  const inStockPct = Math.round((stockStatusData[0].value / total) * 100);
+  const { activeBusinessId } = useBusiness();
+  const [stockData, setStockData] = useState(fallbackData);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data: svcData } = await dashboardService.stockStatus({ businessId: activeBusinessId });
+      if (active && svcData) {
+        // Map the service's { In Stock, Low Stock, Out of Stock, total } shape
+        // to the chart's [{ name, value, color }] shape.
+        const colors = { 'In Stock': '#16a34a', 'Low Stock': '#f59e0b', 'Out of Stock': '#ef4444' };
+        setStockData(Object.entries(svcData).filter(([k]) => colors[k]).map(([name, value]) => ({ name, value, color: colors[name] })));
+      }
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  const total = stockData.reduce((s, d) => s + d.value, 0);
+  const inStockPct = Math.round((stockData[0].value / total) * 100);
 
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-250">
@@ -36,12 +56,12 @@ export default function StockDonut() {
         <ResponsiveContainer width="100%" height={170}>
           <PieChart>
             <Pie
-              data={stockStatusData}
+              data={stockData}
               cx="50%" cy="50%"
               innerRadius={52} outerRadius={76}
               paddingAngle={3} dataKey="value" strokeWidth={0}
             >
-              {stockStatusData.map(e => <Cell key={e.name} fill={e.color} />)}
+              {stockData.map(e => <Cell key={e.name} fill={e.color} />)}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
           </PieChart>
@@ -58,7 +78,7 @@ export default function StockDonut() {
 
       {/* Legend */}
       <div className="mt-3 space-y-2">
-        {stockStatusData.map(item => {
+        {stockData.map(item => {
           const pct = ((item.value / total) * 100).toFixed(0);
           return (
             <div key={item.name} className="flex items-center gap-2">

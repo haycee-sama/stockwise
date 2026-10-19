@@ -1,8 +1,23 @@
 // src/components/dashboard/LowStockTable.jsx
 import { ArrowRight, AlertTriangle, ShoppingCart, Package } from 'lucide-react';
-import { lowStockItems } from '../../data/mockData';
+import { lowStockItems as fallbackData } from '../../data/mockData';
+import { dashboardService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
+import { useState, useEffect } from 'react';
 
 export default function LowStockTable() {
+  const { activeBusinessId } = useBusiness();
+  const [items, setItems] = useState(fallbackData);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data: svcData } = await dashboardService.lowStockList({ businessId: activeBusinessId });
+      if (active && svcData && svcData.length > 0) setItems(svcData);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-350">
       {/* Header */}
@@ -35,7 +50,7 @@ export default function LowStockTable() {
             </tr>
           </thead>
           <tbody>
-            {lowStockItems.map(item => {
+            {items.map(item => {
               const pct        = Math.min((item.stock / item.threshold) * 100, 100);
               const isCritical = item.status === 'critical';
 

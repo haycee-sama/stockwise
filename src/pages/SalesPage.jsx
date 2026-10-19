@@ -1,5 +1,5 @@
 // src/pages/SalesPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Download, Search, ChevronDown, Eye,
   Printer, CheckCircle, Clock, XCircle,
@@ -10,7 +10,10 @@ import {
 import TopBar        from '../components/layout/TopBar';
 import NewSaleModal  from '../components/sales/NewSaleModal';
 import ViewOrderModal from '../components/sales/ViewOrderModal';
-import { salesData as initialSales } from '../data/mockData';
+import { salesService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+
 
 // ── Helpers ──────────────────────────────────────
 const naira = (v) => {
@@ -151,13 +154,39 @@ function SaleCard({ order, onView }) {
 
 // ── Main Page ─────────────────────────────────────
 export default function SalesPage() {
-  const [sales, setSales]           = useState(initialSales);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [sales, setSales]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatus]   = useState('All');
   const [paymentFilter, setPayment] = useState('All');
   const [newSaleOpen, setNewSale]   = useState(false);
   const [viewOrder, setViewOrder]   = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  const fetchSales = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await salesService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setSales([]);
+      } else {
+        setSales(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setSales([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchSales(); }, [fetchSales]);
 
   // ── Stats ─────────────────────────────────────
   const stats = useMemo(() => {
@@ -194,9 +223,61 @@ export default function SalesPage() {
   }, [sales, search, statusFilter, paymentFilter]);
 
   // ── Handlers ─────────────────────────────────
-  const handleNewSale = useCallback((order) => {
-    setSales(prev => [order, ...prev]);
-  }, []);
+  const handleNewSale = useCallback(async (order) => {
+    // The NewSaleModal's payload shape is the legacy mock format
+    // (customer: {name, initials, color, textColor}, items: [{name, qty, price}]).
+    // The Supabase-backed salesService.create() translates this to the
+    // RPC payload shape expected by sw_create_sale (business_id,
+    // customer_id, items: [{item_id, qty, unit_price}]).
+    //
+    // NOTE: the current NewSaleModal passes a free-text customer name
+    // (not a customer_id). The salesService.create() in Supabase mode
+    // currently passes customer_id: null — the sale is created with no
+    // linked customer. A future refactor of NewSaleModal to use a
+    // customer-picker would set customer_id from the selected customer.
+    //
+    // The sw_create_sale RPC validates:
+    //   - business_id (RLS-checked)
+    //   - each item_id exists in the active business
+    //   - each qty > 0 AND qty <= item.stock (cannot oversell)
+    //   - each unit_price >= 0
+    //   - status in ('completed', 'pending', 'cancelled')
+    // The RPC computes the total server-side (client-supplied totals
+    // are IGNORED). If any check fails, the WHOLE sale rolls back —
+    // no partial state (no orphaned sale header, no decremented stock,
+    // no ledger entry).
+    //
+    // The NewSaleModal currently passes items as [{name, qty, price}]
+    // — these are item NAMES, not item_ids. The Supabase-backed
+    // service needs item_ids. For Phase 3B v1, we map by name lookup
+    // via the inventory service. If an item name doesn't match, the
+    // sale is rejected.
+    const payload = {
+      businessId: activeBusinessId,
+      customerName: order.customer?.name,
+      customerId: order.customerId ?? null,
+      items: order.items.map(i => ({
+        itemId:    i.itemId,
+        name:      i.name,
+        qty:       i.qty,
+        unitPrice: i.unitPrice,
+      })),
+      payment: order.payment,
+      status: order.status ?? 'completed',
+      note: order.note,
+    };
+    const { data: persisted, error: svcErr } = await salesService.create(payload);
+    if (svcErr) {
+      console.error('[SalesPage] create sale failed:', svcErr);
+      // Do NOT update local state — the server didn't persist.
+      // The modal stays open + the user can fix the issue.
+      return { success: false, message: svcErr.message };
+    }
+    if (persisted) {
+      setSales(prev => [persisted, ...prev]);
+    }
+    return { success: true };
+  }, [activeBusinessId]);
 
   const openView = useCallback((order) => setViewOrder(order), []);
 
@@ -226,7 +307,20 @@ export default function SalesPage() {
       />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — sales are in-memory only. Configure Supabase to persist via the atomic sw_create_sale RPC.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading sales…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchSales} />
+        )}
+
+        {!loading && !error && (
+          <>
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <SummaryCard icon={TrendingUp} iconBg="bg-green-100" iconColor="text-green-600"
@@ -481,6 +575,8 @@ export default function SalesPage() {
               </strong>
             </span>
           </div>
+        )}
+                </>
         )}
       </main>
 

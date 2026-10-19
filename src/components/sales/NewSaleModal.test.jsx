@@ -7,18 +7,27 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import NewSaleModal from './NewSaleModal';
+import { AuthProvider } from '../../context/AuthContext';
+import { BusinessProvider } from '../../context/BusinessContext';
 
 function renderModal(props = {}) {
   const onSave = vi.fn();
   const onClose = vi.fn();
   render(
-    <NewSaleModal
-      isOpen
-      onClose={onClose}
-      onSave={onSave}
-      {...props}
-    />,
+    <MemoryRouter>
+      <AuthProvider>
+        <BusinessProvider>
+          <NewSaleModal
+            isOpen
+            onClose={onClose}
+            onSave={onSave}
+            {...props}
+          />
+        </BusinessProvider>
+      </AuthProvider>
+    </MemoryRouter>,
   );
   return { onSave, onClose };
 }
@@ -33,7 +42,15 @@ describe('<NewSaleModal />', () => {
   });
 
   it('returns null when isOpen=false (does not render the modal shell)', () => {
-    render(<NewSaleModal isOpen={false} onClose={() => {}} onSave={() => {}} />);
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <BusinessProvider>
+            <NewSaleModal isOpen={false} onClose={() => {}} onSave={() => {}} />
+          </BusinessProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
     expect(screen.queryByText(/New Sale/i)).not.toBeInTheDocument();
   });
 
