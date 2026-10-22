@@ -1,9 +1,9 @@
 // src/pages/ReportsPage.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Download, TrendingUp, TrendingDown, ShoppingBag,
   Package, Users, Receipt, DollarSign, Target,
-  BarChart2, AlertTriangle,
+  BarChart2, AlertTriangle, Calendar,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -11,11 +11,15 @@ import {
   Tooltip, ResponsiveContainer,
 } from 'recharts';
 import TopBar from '../components/layout/TopBar';
+import { reportsService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
 import {
-  salesTrendData, paymentBreakdown, topProductsReport,
-  inventoryCategoryReport, customerAcquisitionData,
-  customerTypeBreakdown, expenseTrend, expenseCategoryReport,
-  customersData, inventoryItems,
+  salesTrendData as fallbackSalesTrend, paymentBreakdown as fallbackPayment,
+  topProductsReport as fallbackTopProducts, inventoryCategoryReport as fallbackInvCat,
+  customerAcquisitionData as fallbackCustAcq, customerTypeBreakdown as fallbackCustType,
+  expenseTrend as fallbackExpTrend, expenseCategoryReport as fallbackExpCat,
+  customersData as fallbackCustomers, inventoryItems as fallbackInventory,
 } from '../data/mockData';
 
 // ── Helpers ──────────────────────────────────────
@@ -72,7 +76,7 @@ const periods = [
 function ReportCard({ title, subtitle, children }) {
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm">
-      <h3 className="text-sm font-bold text-gray-900 mb-0.5" style={{ fontFamily: 'sans-serif' }}>{title}</h3>
+      <h3 className="text-sm font-bold text-gray-900 mb-0.5">{title}</h3>
       {subtitle && <p className="text-xs text-gray-400 mb-5">{subtitle}</p>}
       {children}
     </div>
@@ -83,23 +87,66 @@ function ReportCard({ title, subtitle, children }) {
 function KpiPill({ value, label, color, bg }) {
   return (
     <div className={`${bg} rounded-xl p-3 sm:p-4 text-center`}>
-      <p className={`text-lg sm:text-xl font-extrabold ${color} tabular-nums`}
-        style={{ fontFamily: 'sans-serif' }}>{value}</p>
+      <p className={`text-lg sm:text-xl font-extrabold ${color} tabular-nums`}>{value}</p>
       <p className="text-[10px] text-gray-500 font-medium mt-0.5 truncate">{label}</p>
     </div>
   );
 }
 
+
+// ── Reports data hook: fetch from service, fall back to mock ───
+function useReportData(activeBusinessId) {
+  const [reports, setReports] = useState({
+    sales: null, inventory: null, customers: null, expenses: null,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const [sales, inventory, customers, expenses] = await Promise.all([
+          reportsService.salesReport({ businessId: activeBusinessId }),
+          reportsService.inventoryReport({ businessId: activeBusinessId }),
+          reportsService.customersReport({ businessId: activeBusinessId }),
+          reportsService.expensesReport({ businessId: activeBusinessId }),
+        ]);
+        if (!active) return;
+        setReports({
+          sales: sales?.data ?? null,
+          inventory: inventory?.data ?? null,
+          customers: customers?.data ?? null,
+          expenses: expenses?.data ?? null,
+        });
+        setError(null);
+      } catch (e) {
+        if (active) setError({ code: 'CAUGHT', message: e?.message ?? 'Failed to load reports' });
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  return { reports, loading, error };
+}
+
 // ── Health Banner ─────────────────────────────────
-function HealthBanner() {
-  const totalRevenue  = salesTrendData.reduce((s, m) => s + m.revenue, 0);
-  const totalProfit   = salesTrendData.reduce((s, m) => s + m.profit, 0);
-  const totalExpenses = expenseTrend.reduce((s, m) => s + m.amount, 0);
-  const totalOrders   = salesTrendData.reduce((s, m) => s + m.orders, 0);
+function HealthBanner({ reports = {} }) {
+  const salesTrend   = reports.sales?.trend ?? fallbackSalesTrend;
+  const expTrend     = reports.expenses?.trend ?? fallbackExpTrend;
+  const custData     = fallbackCustomers; // no service equivalent yet for LTV
+  const invData      = fallbackInventory; // no service equivalent yet for out-of-stock count
+  const totalRevenue  = salesTrend.reduce((s, m) => s + m.revenue, 0);
+  const totalProfit   = salesTrend.reduce((s, m) => s + m.profit, 0);
+  const totalExpenses = expTrend.reduce((s, m) => s + m.amount, 0);
+  const totalOrders   = salesTrend.reduce((s, m) => s + m.orders, 0);
   const profitMargin  = ((totalProfit / totalRevenue) * 100).toFixed(1);
   const avgOrderVal   = Math.round(totalRevenue / totalOrders);
-  const avgLTV        = Math.round(customersData.reduce((s, c) => s + c.totalSpent, 0) / customersData.length);
-  const outOfStock    = inventoryItems.filter(i => i.stock === 0).length;
+  const avgLTV        = Math.round(custData.reduce((s, c) => s + c.totalSpent, 0) / Math.max(custData.length, 1));
+  const outOfStock    = invData.filter(i => i.stock === 0).length;
 
   const kpis = [
     { icon: DollarSign, label: 'Revenue',       value: naira(totalRevenue),  change: '+12.4%', up: true  },
@@ -117,7 +164,7 @@ function HealthBanner() {
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
-            <h2 className="text-white text-base font-bold" style={{ fontFamily: 'sans-serif' }}>
+            <h2 className="text-white text-base font-bold">
               Business Health Overview
             </h2>
             <p className="text-gray-400 text-xs mt-0.5">6-month cumulative performance</p>
@@ -140,8 +187,7 @@ function HealthBanner() {
                     {kpi.change}
                   </span>
                 </div>
-                <p className="text-white font-extrabold text-sm leading-none tabular-nums"
-                  style={{ fontFamily: 'sans-serif' }}>{kpi.value}</p>
+                <p className="text-white font-extrabold text-sm leading-none tabular-nums">{kpi.value}</p>
                 <p className="text-gray-400 text-[10px] font-medium mt-1">{kpi.label}</p>
               </div>
             );
@@ -161,16 +207,18 @@ function HealthBanner() {
 }
 
 // ── Sales Report ──────────────────────────────────
-function SalesReport() {
+function SalesReport({ reports = {} }) {
+  const salesTrend = reports.sales?.trend ?? fallbackSalesTrend;
+  const topProducts = reports.sales?.topProducts ?? fallbackTopProducts;
   const totals = {
-    revenue: salesTrendData.reduce((s, m) => s + m.revenue, 0),
-    profit:  salesTrendData.reduce((s, m) => s + m.profit, 0),
-    orders:  salesTrendData.reduce((s, m) => s + m.orders, 0),
+    revenue: salesTrend.reduce((s, m) => s + m.revenue, 0),
+    profit:  salesTrend.reduce((s, m) => s + m.profit, 0),
+    orders:  salesTrend.reduce((s, m) => s + m.orders, 0),
   };
   totals.avgOrder = Math.round(totals.revenue / totals.orders);
   totals.margin   = Math.round((totals.profit / totals.revenue) * 100);
 
-  const lastTwo  = salesTrendData.slice(-2);
+  const lastTwo  = reports.sales?.trend ?? fallbackSalesTrend.slice(-2);
   const momGrowth = lastTwo.length === 2
     ? (((lastTwo[1].revenue - lastTwo[0].revenue) / lastTwo[0].revenue) * 100).toFixed(1)
     : 0;
@@ -193,7 +241,7 @@ function SalesReport() {
           </span>
         </div>
         <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={salesTrendData}>
+          <LineChart data={salesTrend}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => `₦${(v/1000).toFixed(0)}K`} width={52} />
@@ -210,20 +258,20 @@ function SalesReport() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
         <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>Top Selling Products</h3>
+            <h3 className="text-sm font-bold text-gray-900">Top Selling Products</h3>
             <p className="text-xs text-gray-400 mt-0.5">By revenue this period</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[380px]">
               <thead><tr className="bg-gray-50/80 border-b border-gray-100">
                 {['#','Product','Sold','Revenue','Growth'].map(h => (
-                  <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
+                  <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
                 ))}
               </tr></thead>
               <tbody>
-                {topProductsReport.map((p, i) => (
+                {topProducts.map((p, i) => (
                   <tr key={p.name} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-4 py-3"><span className="text-xs font-bold text-gray-300">{i+1}</span></td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-gray-500">{i+1}</span></td>
                     <td className="px-4 py-3">
                       <p className="text-xs font-semibold text-gray-800">{p.name}</p>
                       <p className="text-[10px] text-gray-400">{p.category}</p>
@@ -248,15 +296,15 @@ function SalesReport() {
             <div className="relative flex items-center justify-center">
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
-                  <Pie data={paymentBreakdown} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value" strokeWidth={0}>
-                    {paymentBreakdown.map(e => <Cell key={e.name} fill={e.color} />)}
+                  <Pie data={reports.sales?.paymentBreakdown ?? fallbackPayment} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value" strokeWidth={0}>
+                    {(reports.sales?.paymentBreakdown ?? fallbackPayment).map(e => <Cell key={e.name} fill={e.color} />)}
                   </Pie>
                   <Tooltip content={<DonutTip />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="space-y-2 mt-2">
-              {paymentBreakdown.map(item => (
+              {(reports.sales?.paymentBreakdown ?? fallbackPayment).map(item => (
                 <div key={item.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
@@ -274,26 +322,34 @@ function SalesReport() {
 }
 
 // ── Inventory Report ──────────────────────────────
-function InventoryReport() {
-  const totalItems = inventoryCategoryReport.reduce((s, c) => s + c.items, 0);
-  const totalValue = inventoryCategoryReport.reduce((s, c) => s + c.value, 0);
+function InventoryReport({ reports = {} }) {
+  const categoryReport = reports.inventory?.categoryReport ?? fallbackInvCat;
+  const lowStock = reports.inventory?.lowStock ?? [];
+  const totalItems = categoryReport.reduce((s, c) => s + Number(c.items ?? 0), 0);
+  const totalValue = categoryReport.reduce((s, c) => s + Number(c.value ?? 0), 0);
+  // Derive stock-health counts from the lowStock list. The service
+  // returns items where `stock <= threshold`; we split that into
+  // out-of-stock (stock === 0) and low-stock (0 < stock <= threshold).
+  const outOfStockCount = lowStock.filter(i => Number(i.stock) === 0).length;
+  const lowStockCount = lowStock.length - outOfStockCount;
+  const inStockCount = Math.max(0, totalItems - lowStock.length);
   const stockHealth = [
-    { name: 'In Stock',     value: 875, color: '#16a34a' },
-    { name: 'Low Stock',    value: 263, color: '#f59e0b' },
-    { name: 'Out of Stock', value: 110, color: '#ef4444' },
+    { name: 'In Stock',     value: inStockCount,  color: '#16a34a' },
+    { name: 'Low Stock',    value: lowStockCount, color: '#f59e0b' },
+    { name: 'Out of Stock', value: outOfStockCount, color: '#ef4444' },
   ];
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiPill value={totalItems.toLocaleString()} label="Total Items"     color="text-blue-600"   bg="bg-blue-50"   />
-        <KpiPill value={naira(totalValue)}           label="Inventory Value" color="text-green-600"  bg="bg-green-50"  />
-        <KpiPill value="875"                         label="In Stock"        color="text-emerald-600" bg="bg-emerald-50" />
-        <KpiPill value="110"                         label="Out of Stock"    color="text-red-500"    bg="bg-red-50"    />
+        <KpiPill value={totalItems.toLocaleString()}     label="Total Items"     color="text-blue-600"   bg="bg-blue-50"   />
+        <KpiPill value={naira(totalValue)}                label="Inventory Value" color="text-green-600"  bg="bg-green-50"  />
+        <KpiPill value={inStockCount.toLocaleString()}    label="In Stock"        color="text-emerald-600" bg="bg-emerald-50" />
+        <KpiPill value={outOfStockCount.toLocaleString()} label="Out of Stock"    color="text-red-500"    bg="bg-red-50"    />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
         <ReportCard title="Inventory by Category" subtitle="Stock distribution & value" >
           <div className="lg:col-span-3 space-y-5">
-            {inventoryCategoryReport.map(cat => {
+            {(reports.inventory?.categoryReport ?? fallbackInvCat).map(cat => {
               const pct = (cat.items / totalItems) * 100;
               return (
                 <div key={cat.name}>
@@ -327,7 +383,7 @@ function InventoryReport() {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute text-center pointer-events-none">
-              <p className="text-xl font-extrabold text-gray-900" style={{ fontFamily: 'sans-serif' }}>1,248</p>
+              <p className="text-xl font-extrabold text-gray-900">1,248</p>
               <p className="text-[10px] text-gray-400">total</p>
             </div>
           </div>
@@ -346,15 +402,15 @@ function InventoryReport() {
 }
 
 // ── Customer Report ───────────────────────────────
-function CustomerReport() {
-  const topCustomers = [...customersData].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
-  const totalRevenue = customersData.reduce((s, c) => s + c.totalSpent, 0);
-  const avgLTV       = Math.round(totalRevenue / customersData.length);
-  const retention    = Math.round((customersData.filter(c => c.totalOrders > 1).length / customersData.length) * 100);
+function CustomerReport({ reports = {} }) {
+  const topCustomers = [...fallbackCustomers].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
+  const totalRevenue = fallbackCustomers.reduce((s, c) => s + c.totalSpent, 0);
+  const avgLTV       = Math.round(totalRevenue / fallbackCustomers.length);
+  const retention    = Math.round((fallbackCustomers.filter(c => c.totalOrders > 1).length / fallbackCustomers.length) * 100);
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiPill value={customersData.length} label="Total Customers"  color="text-blue-600"   bg="bg-blue-50"   />
+        <KpiPill value={(reports.customers?.topCustomers ?? fallbackCustomers).length} label="Total Customers"  color="text-blue-600"   bg="bg-blue-50"   />
         <KpiPill value={naira(totalRevenue)}  label="Total Revenue"    color="text-green-600"  bg="bg-green-50"  />
         <KpiPill value={naira(avgLTV)}        label="Avg. Lifetime Val" color="text-purple-600" bg="bg-purple-50" />
         <KpiPill value={`${retention}%`}     label="Retention Rate"   color="text-amber-600"  bg="bg-amber-50"  />
@@ -362,7 +418,7 @@ function CustomerReport() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
         <ReportCard title="Customer Acquisition" subtitle="New vs returning per month">
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={customerAcquisitionData} barGap={4} barCategoryGap="30%">
+            <BarChart data={reports.customers?.acquisition ?? fallbackCustAcq} barGap={4} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} width={24} />
@@ -380,15 +436,15 @@ function CustomerReport() {
           <div className="relative flex items-center justify-center">
             <ResponsiveContainer width="100%" height={155}>
               <PieChart>
-                <Pie data={customerTypeBreakdown} cx="50%" cy="50%" innerRadius={42} outerRadius={65} paddingAngle={3} dataKey="value" strokeWidth={0}>
-                  {customerTypeBreakdown.map(e => <Cell key={e.name} fill={e.color} />)}
+                <Pie data={reports.customers?.typeBreakdown ?? fallbackCustType} cx="50%" cy="50%" innerRadius={42} outerRadius={65} paddingAngle={3} dataKey="value" strokeWidth={0}>
+                  {reports.customers?.typeBreakdown ?? fallbackCustType.map(e => <Cell key={e.name} fill={e.color} />)}
                 </Pie>
                 <Tooltip content={<DonutTip />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
           <div className="space-y-2 mt-1">
-            {customerTypeBreakdown.map(item => (
+            {reports.customers?.typeBreakdown ?? fallbackCustType.map(item => (
               <div key={item.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} /><span className="text-xs text-gray-600 font-medium">{item.name}</span></div>
                 <span className="text-xs font-bold text-gray-900">{item.value}%</span>
@@ -399,20 +455,20 @@ function CustomerReport() {
       </div>
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>Top Customers by Revenue</h3>
+          <h3 className="text-sm font-bold text-gray-900">Top Customers by Revenue</h3>
           <p className="text-xs text-gray-400 mt-0.5">Highest lifetime value</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[500px]">
             <thead><tr className="bg-gray-50/80 border-b border-gray-100">
               {['#','Customer','Type','Orders','Spent','Status'].map(h => (
-                <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
+                <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
               ))}
             </tr></thead>
             <tbody>
               {topCustomers.map((c, i) => (
                 <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3"><span className="text-xs font-bold text-gray-300">{i+1}</span></td>
+                  <td className="px-4 py-3"><span className="text-xs font-bold text-gray-500">{i+1}</span></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
@@ -446,8 +502,8 @@ function CustomerReport() {
 }
 
 // ── Expenses Report ───────────────────────────────
-function ExpensesReport() {
-  const total       = expenseCategoryReport.reduce((s, c) => s + c.amount, 0);
+function ExpensesReport({ reports = {} }) {
+  const total       = reports.expenses?.categoryReport ?? fallbackExpCat.reduce((s, c) => s + c.amount, 0);
   const profitMargin = (((2400000 - total) / 2400000) * 100).toFixed(1);
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -459,7 +515,7 @@ function ExpensesReport() {
       </div>
       <ReportCard title="Monthly Expense Trend" subtitle="6-month spend overview">
         <ResponsiveContainer width="100%" height={190}>
-          <AreaChart data={expenseTrend}>
+          <AreaChart data={reports.expenses?.trend ?? fallbackExpTrend}>
             <defs>
               <linearGradient id="rExpGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.15} />
@@ -477,13 +533,13 @@ function ExpensesReport() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
         <ReportCard title="Expense by Category" subtitle="Where your money goes">
           <div className="space-y-4">
-            {expenseCategoryReport.map(cat => (
+            {(reports.expenses?.categoryReport ?? fallbackExpCat).map(cat => (
               <div key={cat.name}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm font-semibold text-gray-700">{cat.name}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-gray-400">{cat.pct}%</span>
-                    <span className="text-sm font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(cat.amount)}</span>
+                    <span className="text-sm font-extrabold text-gray-900 tabular-nums">{naira(cat.amount)}</span>
                   </div>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -495,13 +551,13 @@ function ExpensesReport() {
         </ReportCard>
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>Largest Expenses</h3>
+            <h3 className="text-sm font-bold text-gray-900">Largest Expenses</h3>
             <p className="text-xs text-gray-400 mt-0.5">Top 5 by amount</p>
           </div>
           <div className="divide-y divide-gray-50">
-            {[...expenseCategoryReport].sort((a, b) => b.amount - a.amount).slice(0, 5).map((e, i) => (
+            {[...(reports.expenses?.categoryReport ?? fallbackExpCat)].sort((a, b) => b.amount - a.amount).slice(0, 5).map((e, i) => (
               <div key={e.name} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
-                <span className="text-xs font-bold text-gray-300 w-4">{i+1}</span>
+                <span className="text-xs font-bold text-gray-500 w-4">{i+1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-gray-800 truncate">{e.name}</p>
                   <p className="text-[10px] text-gray-400">{e.pct}% of total</p>
@@ -520,6 +576,8 @@ function ExpensesReport() {
 
 // ── Main Page ─────────────────────────────────────
 export default function ReportsPage() {
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const { reports, loading, error } = useReportData(activeBusinessId);
   const [activeTab, setActiveTab] = useState('sales');
   const [period, setPeriod]       = useState('month');
 
@@ -534,7 +592,7 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all shadow-sm">
+      <button disabled title="Coming soon — PDF export is not yet implemented" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Download size={14} /><span className="hidden sm:inline">Export PDF</span>
       </button>
     </>
@@ -545,7 +603,16 @@ export default function ReportsPage() {
       <TopBar title="Reports" subtitle="Detailed business performance insights" actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
-        <HealthBanner />
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800 mb-5">
+            Demo mode — report data is mock. Configure Supabase for real aggregates.
+          </div>
+        )}
+        {loading && <LoadingState label="Loading reports…" />}
+        {error && <ErrorState error={error} />}
+        {!loading && !error && (
+          <>
+        <HealthBanner reports={reports} />
 
         {/* Tabs */}
         <div className="flex items-center gap-2 mb-5 sm:mb-6 overflow-x-auto pb-1">
@@ -565,15 +632,17 @@ export default function ReportsPage() {
             );
           })}
           <div className="ml-auto flex items-center gap-2 text-xs text-gray-400 bg-white border border-gray-200 rounded-xl px-3 py-2 flex-shrink-0">
-            <div size={12} />
+            <Calendar size={12} />
             <span className="font-medium hidden sm:block">{periods.find(p => p.id === period)?.label}</span>
           </div>
         </div>
 
-        {activeTab === 'sales'     && <SalesReport     />}
-        {activeTab === 'inventory' && <InventoryReport />}
-        {activeTab === 'customers' && <CustomerReport  />}
-        {activeTab === 'expenses'  && <ExpensesReport  />}
+        {activeTab === 'sales'     && <SalesReport     reports={reports} />}
+        {activeTab === 'inventory' && <InventoryReport reports={reports} />}
+        {activeTab === 'customers' && <CustomerReport  reports={reports} />}
+        {activeTab === 'expenses'  && <ExpensesReport  reports={reports} />}
+          </>
+        )}
       </main>
     </div>
   );

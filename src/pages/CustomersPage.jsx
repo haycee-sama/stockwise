@@ -1,5 +1,5 @@
 // src/pages/CustomersPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Upload, Search, ChevronDown, Edit2, Trash2,
   Eye, Phone, Mail, MapPin, Users, TrendingUp,
@@ -10,7 +10,10 @@ import TopBar              from '../components/layout/TopBar';
 import CustomerModal       from '../components/customers/CustomerModal';
 import CustomerDrawer      from '../components/customers/CustomerDrawer';
 import CustomerDeleteModal from '../components/customers/CustomerDeleteModal';
-import { customersData, customerTypes, customerStatuses } from '../data/mockData';
+import { customersService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import { customerTypes as staticTypes, customerStatuses as staticStatuses } from '../data/mockData';
 
 const naira = (v) => {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -48,8 +51,7 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay }) {
         </div>
         <div className="min-w-0">
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-0.5 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate"
-            style={{ fontFamily: 'sans-serif' }}>{value}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate">{value}</p>
           {sub && <p className="text-[11px] text-gray-400 font-medium mt-0.5 truncate">{sub}</p>}
         </div>
       </div>
@@ -63,7 +65,7 @@ function CustomerCard({ customer, onView, onEdit, onDelete }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center text-base font-extrabold flex-shrink-0"
-            style={{ background: customer.color, color: customer.textColor, fontFamily: 'sans-serif' }}>
+            style={{ background: customer.color, color: customer.textColor }}>
             {customer.initials}
           </div>
           <div className="min-w-0">
@@ -97,13 +99,13 @@ function CustomerCard({ customer, onView, onEdit, onDelete }) {
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-          <p className="text-sm font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>
+          <p className="text-sm font-extrabold text-gray-900 tabular-nums">
             {naira(customer.totalSpent)}
           </p>
           <p className="text-[10px] text-gray-400 font-medium">Spent</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-          <p className="text-sm font-extrabold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+          <p className="text-sm font-extrabold text-gray-900">
             {customer.totalOrders}
           </p>
           <p className="text-[10px] text-gray-400 font-medium">Orders</p>
@@ -124,6 +126,7 @@ function CustomerCard({ customer, onView, onEdit, onDelete }) {
           <Edit2 size={12} /> Edit
         </button>
         <button onClick={() => onDelete(customer)}
+          aria-label="Delete"
           className="w-8 flex items-center justify-center py-2 text-gray-400 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
           <Trash2 size={12} />
         </button>
@@ -133,7 +136,10 @@ function CustomerCard({ customer, onView, onEdit, onDelete }) {
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers]   = useState(customersData);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [customers, setCustomers]   = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [typeFilter, setType]       = useState('All');
   const [statusFilter, setStatus]   = useState('All');
@@ -143,6 +149,30 @@ export default function CustomersPage() {
   const [drawer, setDrawer]         = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, customer: null });
   const [showFilters, setShowFilters] = useState(false);
+
+  // ── Fetch customers via the service layer ─────
+  const fetchCustomers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await customersService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setCustomers([]);
+      } else {
+        setCustomers(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
   const stats = useMemo(() => {
     const thisMonth = new Date(); thisMonth.setDate(1);
@@ -175,22 +205,36 @@ export default function CustomersPage() {
   const openView  = useCallback((c) => setDrawer(c), []);
   const openDel   = useCallback((c) => setDeleteModal({ open: true, customer: c }), []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    const isExisting = customers.some(c => String(c.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await customersService.update(saved.id, payload)
+      : await customersService.create(payload);
+    if (svcErr) {
+      console.error('[CustomersPage] save failed:', svcErr);
+      return;
+    }
     setCustomers(prev =>
-      prev.some(c => c.id === saved.id)
-        ? prev.map(c => c.id === saved.id ? saved : c)
-        : [...prev, saved]
+      prev.some(c => String(c.id) === String(persisted.id))
+        ? prev.map(c => String(c.id) === String(persisted.id) ? persisted : c)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [customers, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setCustomers(prev => prev.filter(c => c.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await customersService.remove(id);
+    if (svcErr) {
+      console.error('[CustomersPage] delete failed:', svcErr);
+      return;
+    }
+    setCustomers(prev => prev.filter(c => String(c.id) !== String(id)));
     if (drawer?.id === id) setDrawer(null);
   }, [drawer]);
 
   const headerActions = (
     <>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+      <button disabled title="Coming soon" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Upload size={14} />
         <span className="hidden sm:inline">Import</span>
       </button>
@@ -209,7 +253,20 @@ export default function CustomersPage() {
         actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading customers…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchCustomers} />
+        )}
+
+        {!loading && !error && (
+          <>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Users}      iconBg="bg-blue-100"   iconColor="text-blue-600"   label="Total"       value={stats.total}          sub={`${filtered.length} shown`} delay="0.05s" />
           <StatCard icon={UserCheck}  iconBg="bg-green-100"  iconColor="text-green-600"  label="Active"      value={stats.active}         sub="Currently active" delay="0.10s" />
@@ -242,6 +299,7 @@ export default function CustomersPage() {
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
                 <button onClick={() => setSearch('')}
+                  aria-label="Clear search"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                   <X size={14} />
                 </button>
@@ -259,11 +317,13 @@ export default function CustomersPage() {
             </span>
             <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               <button onClick={() => setViewMode('grid')}
+                aria-label="Grid view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'grid' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <LayoutGrid size={14} />
               </button>
               <button onClick={() => setViewMode('list')}
+                aria-label="List view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'list' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <List size={14} />
@@ -276,14 +336,14 @@ export default function CustomersPage() {
               <div className="relative">
                 <select value={typeFilter} onChange={e => setType(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {customerTypes.map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
+                  {staticTypes.map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
                 <select value={statusFilter} onChange={e => setStatus(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {customerStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
+                  {staticStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -303,7 +363,7 @@ export default function CustomersPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Users size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2" style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-base font-bold text-gray-700 mb-2">
               No customers found
             </h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
@@ -340,7 +400,7 @@ export default function CustomersPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr>
                     {['Customer', 'Type', 'Contact', 'Location', 'Spent', 'Orders', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">{h}</th>
+                      <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -380,9 +440,9 @@ export default function CustomersPage() {
                       <td className="px-4 py-3.5"><StatusBadge status={c.status} /></td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => openView(c)} className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-green-50 hover:border-green-200 hover:text-green-600 text-gray-400 transition-all"><Eye size={12} /></button>
-                          <button onClick={() => openEdit(c)} className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"><Edit2 size={12} /></button>
-                          <button onClick={() => openDel(c)} className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all"><Trash2 size={12} /></button>
+                          <button onClick={() => openView(c)} aria-label="View" className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-green-50 hover:border-green-200 hover:text-green-600 text-gray-400 transition-all"><Eye size={12} /></button>
+                          <button onClick={() => openEdit(c)} aria-label="Edit" className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"><Edit2 size={12} /></button>
+                          <button onClick={() => openDel(c)} aria-label="Delete" className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all"><Trash2 size={12} /></button>
                         </div>
                       </td>
                     </tr>
@@ -399,9 +459,11 @@ export default function CustomersPage() {
             <span className="hidden sm:block">Combined revenue: <strong className="text-green-600">{naira(filtered.reduce((s, c) => s + c.totalSpent, 0))}</strong></span>
           </div>
         )}
+          </>
+        )}
       </main>
 
-      <CustomerModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editCustomer={editCustomer} />
+      <CustomerModal key={editCustomer?.id ?? 'new'} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editCustomer={editCustomer} />
       <CustomerDrawer customer={drawer} onClose={() => setDrawer(null)} onEdit={() => openEdit(drawer)} />
       <CustomerDeleteModal isOpen={deleteModal.open} customer={deleteModal.customer} onClose={() => setDeleteModal({ open: false, customer: null })} onConfirm={handleDelete} />
     </div>

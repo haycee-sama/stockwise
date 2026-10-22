@@ -1,5 +1,5 @@
 // src/pages/VendorsPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Upload, Search, ChevronDown, Edit2, Trash2,
   Eye, Phone, MapPin, Truck, Package, TrendingUp,
@@ -11,7 +11,10 @@ import VendorModal       from '../components/vendors/VendorModal';
 import VendorDrawer      from '../components/vendors/VendorDrawer';
 import VendorDeleteModal from '../components/vendors/VendorDeleteModal';
 import PlaceOrderModal   from '../components/vendors/PlaceOrderModal';
-import { vendorsData, vendorCategories, vendorStatuses } from '../data/mockData';
+import { vendorsService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import { vendorCategories as staticCategories, vendorStatuses as staticStatuses } from '../data/mockData';
 
 const naira = (v) => {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -40,8 +43,7 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay }) {
         </div>
         <div className="min-w-0">
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-0.5 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate"
-            style={{ fontFamily: 'sans-serif' }}>{value}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate">{value}</p>
           {sub && <p className="text-[11px] text-gray-400 font-medium mt-0.5">{sub}</p>}
         </div>
       </div>
@@ -55,7 +57,7 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center text-base font-extrabold flex-shrink-0"
-            style={{ background: vendor.color, color: vendor.textColor, fontFamily: 'sans-serif' }}>
+            style={{ background: vendor.color, color: vendor.textColor }}>
             {vendor.initials}
           </div>
           <div className="min-w-0">
@@ -102,11 +104,11 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-          <p className="text-sm font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(vendor.totalPaid)}</p>
+          <p className="text-sm font-extrabold text-gray-900 tabular-nums">{naira(vendor.totalPaid)}</p>
           <p className="text-[10px] text-gray-400 font-medium">Total Paid</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-          <p className="text-sm font-extrabold text-gray-900" style={{ fontFamily: 'sans-serif' }}>{vendor.totalOrders}</p>
+          <p className="text-sm font-extrabold text-gray-900">{vendor.totalOrders}</p>
           <p className="text-[10px] text-gray-400 font-medium">Orders</p>
         </div>
       </div>
@@ -128,10 +130,12 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
           <Eye size={12} /> View
         </button>
         <button onClick={() => onEdit(vendor)}
+          aria-label="Edit"
           className="w-8 flex items-center justify-center py-2 text-gray-400 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all">
           <Edit2 size={12} />
         </button>
         <button onClick={() => onDelete(vendor)}
+          aria-label="Delete"
           className="w-8 flex items-center justify-center py-2 text-gray-400 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
           <Trash2 size={12} />
         </button>
@@ -141,7 +145,10 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
 }
 
 export default function VendorsPage() {
-  const [vendors, setVendors]       = useState(vendorsData);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [vendors, setVendors]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [categoryFilter, setCategory] = useState('All');
   const [statusFilter, setStatus]   = useState('All');
@@ -151,6 +158,29 @@ export default function VendorsPage() {
   const [drawer, setDrawer]         = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, vendor: null });
   const [orderModal, setOrderModal] = useState({ open: false, vendor: null });
+
+  const fetchVendors = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await vendorsService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setVendors([]);
+      } else {
+        setVendors(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setVendors([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchVendors(); }, [fetchVendors]);
 
   const stats = useMemo(() => ({
     total:     vendors.length,
@@ -181,29 +211,73 @@ export default function VendorsPage() {
   const openDel      = useCallback((v) => setDeleteModal({ open: true, vendor: v }), []);
   const openOrder    = useCallback((v) => { setOrderModal({ open: true, vendor: v }); setDrawer(null); }, []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    const isExisting = vendors.some(v => String(v.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await vendorsService.update(saved.id, payload)
+      : await vendorsService.create(payload);
+    if (svcErr) {
+      console.error('[VendorsPage] save failed:', svcErr);
+      return;
+    }
     setVendors(prev =>
-      prev.some(v => v.id === saved.id)
-        ? prev.map(v => v.id === saved.id ? saved : v)
-        : [...prev, saved]
+      prev.some(v => String(v.id) === String(persisted.id))
+        ? prev.map(v => String(v.id) === String(persisted.id) ? persisted : v)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [vendors, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setVendors(prev => prev.filter(v => v.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await vendorsService.remove(id);
+    if (svcErr) {
+      console.error('[VendorsPage] delete failed:', svcErr);
+      return;
+    }
+    setVendors(prev => prev.filter(v => String(v.id) !== String(id)));
     if (drawer?.id === id) setDrawer(null);
   }, [drawer]);
 
-  const handlePlaceOrder = useCallback((vendorId, newOrder, total) => {
+  const handlePlaceOrder = useCallback(async (vendorId, newOrder, total) => {
+    const { error: svcErr } = await vendorsService.placeOrder(vendorId, newOrder, total);
+    if (svcErr) {
+      console.error('[VendorsPage] placeOrder failed:', svcErr);
+      // Do NOT update local state — the server didn't persist.
+      return;
+    }
     setVendors(prev => prev.map(v => {
-      if (v.id !== vendorId) return v;
+      if (String(v.id) !== String(vendorId)) return v;
       return { ...v, totalOrders: v.totalOrders + 1, pendingAmount: v.pendingAmount + total, lastOrder: newOrder.date, orders: [newOrder, ...(v.orders ?? [])] };
     }));
   }, []);
 
+  // Receive a purchase order — calls vendorsService.receivePurchaseOrder.
+  // In demo mode: mock service marks the PO as delivered.
+  // In Supabase mode: calls the sw_receive_purchase_order RPC (see
+  // docs/BACKEND_HANDOVER.md).
+  // On success, updates the vendor's orders in local state.
+  const handleReceive = useCallback(async (poId) => {
+    const { error: svcErr } = await vendorsService.receivePurchaseOrder(poId);
+    if (svcErr) {
+      console.error('[VendorsPage] receive PO failed:', svcErr);
+      alert(`Could not receive purchase order: ${svcErr.message}`);
+      return;
+    }
+    // Update the vendor's orders in local state.
+    setVendors(prev => prev.map(v => {
+      const poIdx = (v.orders ?? []).findIndex(o => o.id === poId);
+      if (poIdx < 0) return v;
+      const newOrders = [...v.orders];
+      newOrders[poIdx] = { ...newOrders[poIdx], status: 'delivered' };
+      return { ...v, orders: newOrders, totalPaid: v.totalPaid + newOrders[poIdx].total, pendingAmount: Math.max(0, v.pendingAmount - newOrders[poIdx].total) };
+    }));
+    // Also refresh the full vendor list to get updated PO statuses.
+    fetchVendors();
+  }, [fetchVendors]);
+
   const headerActions = (
     <>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+      <button disabled title="Coming soon" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Upload size={14} /><span className="hidden sm:inline">Import</span>
       </button>
       <button onClick={openAdd}
@@ -218,7 +292,20 @@ export default function VendorsPage() {
       <TopBar title="Vendors" subtitle={`${vendors.length} suppliers · ${naira(stats.totalPaid)} total purchases`} actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading vendors…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchVendors} />
+        )}
+
+        {!loading && !error && (
+          <>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Truck}      iconBg="bg-blue-100"   iconColor="text-blue-600"   label="Total Vendors"    value={stats.total}            sub={`${stats.active} active`} delay="0.05s" />
           <StatCard icon={Package}    iconBg="bg-green-100"  iconColor="text-green-600"  label="Active Suppliers" value={stats.active}           sub="Currently active" delay="0.10s" />
@@ -245,7 +332,7 @@ export default function VendorsPage() {
                 placeholder="Search vendor, items, location..."
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
+                <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
               )}
             </div>
             <button onClick={() => setShowFilters(v => !v)}
@@ -262,14 +349,14 @@ export default function VendorsPage() {
               <div className="relative">
                 <select value={categoryFilter} onChange={e => setCategory(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {vendorCategories.map(c => <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>)}
+                  {staticCategories.map(c => <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
                 <select value={statusFilter} onChange={e => setStatus(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
-                  {vendorStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
+                  {staticStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -288,7 +375,7 @@ export default function VendorsPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Truck size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2" style={{ fontFamily: 'sans-serif' }}>No vendors found</h3>
+            <h3 className="text-base font-bold text-gray-700 mb-2">No vendors found</h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
               {search ? `No results for "${search}".` : 'Add your first supplier to get started.'}
             </p>
@@ -320,10 +407,12 @@ export default function VendorsPage() {
             <span className="hidden sm:block">Combined spend: <strong className="text-green-600">{naira(filtered.reduce((s, v) => s + v.totalPaid, 0))}</strong></span>
           </div>
         )}
+                </>
+        )}
       </main>
 
-      <VendorModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editVendor={editVendor} />
-      <VendorDrawer vendor={drawer} onClose={() => setDrawer(null)} onEdit={() => openEdit(drawer)} onPlaceOrder={() => openOrder(drawer)} />
+      <VendorModal key={editVendor?.id ?? 'new'} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editVendor={editVendor} />
+      <VendorDrawer vendor={drawer} onClose={() => setDrawer(null)} onEdit={() => openEdit(drawer)} onPlaceOrder={() => openOrder(drawer)} onReceive={handleReceive} />
       <VendorDeleteModal isOpen={deleteModal.open} vendor={deleteModal.vendor} onClose={() => setDeleteModal({ open: false, vendor: null })} onConfirm={handleDelete} />
       <PlaceOrderModal isOpen={orderModal.open} vendor={orderModal.vendor} onClose={() => setOrderModal({ open: false, vendor: null })} onSave={handlePlaceOrder} />
     </div>

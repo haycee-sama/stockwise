@@ -1,13 +1,16 @@
 // src/components/sales/NewSaleModal.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   X, Plus, Minus, Trash2, ShoppingCart,
   Loader2, Search, User, Banknote,
   Building2, CreditCard, ChevronRight,
   Package, CheckCircle, ArrowLeft,
 } from 'lucide-react';
-import { inventoryItems, paymentMethods } from '../../data/mockData';
+import { inventoryService } from '../../services';
+import { customersService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
 import { ItemIcon } from '../../utils/inventoryIcons';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 
@@ -15,7 +18,7 @@ const naira = (v) => `₦${Number(v).toLocaleString()}`;
 const paymentConfig = {
   Cash:     { icon: Banknote,   color: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-blue-300'   },
   Transfer: { icon: Building2,  color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-300' },
-  POS:      { icon: CreditCard, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-300' },
+  Card:     { icon: CreditCard, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-300' },
 };
 
 // ── Cart item row ─────────────────────────────────
@@ -31,11 +34,13 @@ function CartItem({ item, onUpdateQty, onRemove }) {
       {/* Qty stepper */}
       <div className="flex items-center gap-1 flex-shrink-0">
         <button onClick={() => onUpdateQty(item.id, item.qty - 1)}
+          aria-label="Decrease quantity"
           className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 active:scale-90 transition-all">
           <Minus size={10} />
         </button>
         <span className="text-xs font-bold w-6 text-center tabular-nums">{item.qty}</span>
         <button onClick={() => onUpdateQty(item.id, item.qty + 1)}
+          aria-label="Increase quantity"
           className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 active:scale-90 transition-all">
           <Plus size={10} />
         </button>
@@ -44,6 +49,7 @@ function CartItem({ item, onUpdateQty, onRemove }) {
         {naira(item.sellingPrice * item.qty)}
       </p>
       <button onClick={() => onRemove(item.id)}
+        aria-label="Remove item"
         className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0">
         <Trash2 size={13} />
       </button>
@@ -52,16 +58,66 @@ function CartItem({ item, onUpdateQty, onRemove }) {
 }
 
 export default function NewSaleModal({ isOpen, onClose, onSave }) {
+  // ── All hooks called unconditionally at the top (Rules of Hooks) ──
+  const { activeBusinessId } = useBusiness();
   const [cart, setCart]         = useState([]);
   const [search, setSearch]     = useState('');
   const [customer, setCustomer] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [customerList, setCustomerList] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [payment, setPayment]   = useState('Cash');
   const [note, setNote]         = useState('');
   const [errors, setErrors]     = useState({});
   const [saving, setSaving]     = useState(false);
   const [step, setStep]         = useState(1); // 1=items, 2=payment
 
-  if (!isOpen) return null;
+  // Fetch inventory items via the service layer (replaces mockData import).
+  const [inventoryItems, setInventoryItems] = useState([]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await inventoryService.list({ businessId: activeBusinessId ?? undefined });
+      if (active && data) setInventoryItems(data);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  // Fetch customers for the customer picker.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await customersService.list({ businessId: activeBusinessId ?? undefined });
+      if (active && data) setCustomerList(data);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  // Filtered customers for the dropdown.
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch.trim()) return customerList.slice(0, 5);
+    const q = customerSearch.toLowerCase();
+    return customerList.filter(c =>
+      `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
+      (c.phone ?? '').includes(q) ||
+      (c.email ?? '').toLowerCase().includes(q)
+    ).slice(0, 5);
+  }, [customerSearch, customerList]);
+
+  // Handle selecting a customer from the dropdown.
+  const selectCustomer = useCallback((c) => {
+    setCustomer(`${c.firstName} ${c.lastName}`);
+    setSelectedCustomerId(c.id);
+    setShowCustomerDropdown(false);
+    setCustomerSearch('');
+    if (errors.customer) setErrors(p => ({ ...p, customer: '' }));
+  }, [errors.customer]);
+
+  // Handle clearing the customer selection (revert to walk-in / free-text).
+  const clearCustomerSelection = useCallback(() => {
+    setSelectedCustomerId(null);
+  }, []);
 
   const filteredInventory = useMemo(() => {
     const q = search.toLowerCase();
@@ -71,7 +127,17 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
         i.sku.toLowerCase().includes(q)
       )
     );
-  }, [search]);
+  }, [search, inventoryItems]);
+
+  const clearCartState = useCallback(() => {
+    setCart([]); setCustomer(''); setSelectedCustomerId(null);
+    setCustomerSearch(''); setShowCustomerDropdown(false);
+    setPayment('Cash'); setNote(''); setStep(1); setSearch(''); setErrors({});
+  }, []);
+
+  const removeFromCart = useCallback((id) => {
+    setCart(prev => prev.filter(c => c.id !== id));
+  }, []);
 
   const addToCart = useCallback((item) => {
     setCart(prev => {
@@ -91,14 +157,11 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   const updateQty = useCallback((id, qty) => {
     if (qty < 1) { removeFromCart(id); return; }
     const item = inventoryItems.find(i => i.id === id);
+    if (!item) return;
     setCart(prev =>
       prev.map(c => c.id === id ? { ...c, qty: Math.min(qty, item.stock) } : c)
     );
-  }, []);
-
-  const removeFromCart = useCallback((id) => {
-    setCart(prev => prev.filter(c => c.id !== id));
-  }, []);
+  }, [removeFromCart, inventoryItems]);
 
   const subtotal = cart.reduce((s, c) => s + c.sellingPrice * c.qty, 0);
   const totalItems = cart.reduce((s, c) => s + c.qty, 0);
@@ -112,38 +175,83 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
   };
 
   const handleSubmit = async () => {
+    if (cart.length === 0) {
+      setErrors({ cart: 'Add at least one item' });
+      setStep(1);
+      return;
+    }
+    if (!customer.trim()) {
+      setErrors({ customer: 'Customer name is required' });
+      setStep(1);
+      return;
+    }
     setSaving(true);
-    await new Promise(r => setTimeout(r, 800));
-    onSave({
-      id: `ORD-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-      customer: {
-        name:      customer,
-        initials:  customer.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
-        color:     '#f0fdf4',
-        textColor: '#15803d',
-      },
-      items: cart.map(c => ({ name: c.name, qty: c.qty, price: c.sellingPrice })),
-      total:   subtotal,
-      payment,
-      status:  'completed',
-      date:    new Date().toISOString(),
-      note,
-    });
-    setSaving(false);
-    // Reset
-    setCart([]); setCustomer(''); setPayment('Cash');
-    setNote(''); setStep(1); setSearch(''); setErrors({});
-    onClose();
+    try {
+      // Pass the order payload to onSave. In Supabase mode, the parent's
+      // handleNewSale calls the atomic sw_create_sale RPC. The parent
+      // returns { success: boolean, message?: string } so the modal
+      // knows whether to close or show an error.
+      const payload = {
+        // Note: the parent now ignores the locally-generated `id` and
+        // `date` — the server generates the real display_id (ORD-XXXX)
+        // and sale_date atomically via the sw_create_sale RPC.
+        id: `ORD-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+        customer: {
+          name:      customer,
+          initials:  customer.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+          color:     '#f0fdf4',
+          textColor: '#15803d',
+        },
+        customerId: selectedCustomerId, // UUID for a known customer, null for walk-in
+        items: cart.map(c => ({
+          itemId:     c.id,
+          name:       c.name,
+          qty:        c.qty,
+          unitPrice:  c.sellingPrice,
+        })),
+        total:   subtotal,
+        payment,
+        status:  'completed',
+        date:    new Date().toISOString(),
+        note,
+      };
+      // onSave may be sync (legacy) or async (Phase 3B). Use Promise.resolve
+      // to handle both shapes.
+      const result = await Promise.resolve(onSave(payload));
+      if (result && result.success === false) {
+        // Server rejected — show the error in the modal + stay open.
+        setErrors(prev => ({ ...prev, submit: result.message ?? 'Could not create sale.' }));
+        return;
+      }
+      clearCartState();
+    } catch (e) {
+      setErrors(prev => ({ ...prev, submit: e?.message ?? 'Network error.' }));
+      return;
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClose = () => {
-    setCart([]); setCustomer(''); setPayment('Cash');
-    setNote(''); setStep(1); setSearch(''); setErrors({});
+    clearCartState();
     onClose();
   };
 
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
+  // Early return AFTER all hooks have been called.
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-sale-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       {/* Modal panel */}
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-2xl shadow-2xl flex flex-col rounded-t-2xl"
         style={{ maxHeight: '95vh' }}>
@@ -160,7 +268,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
               <ShoppingCart size={17} className="text-green-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 id="new-sale-modal-title" className="text-sm font-bold text-gray-900">
                 New Sale
               </h2>
               <p className="text-[11px] text-gray-400">
@@ -169,6 +277,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
             </div>
           </div>
           <button onClick={handleClose}
+            aria-label="Close"
             className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>
@@ -277,20 +386,75 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
               <div className="p-3 border-t border-gray-100 space-y-3 flex-shrink-0">
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
-                    Customer Name <span className="text-red-400">*</span>
+                    Customer {selectedCustomerId && <span className="text-green-500 normal-case">✓ linked</span>}
+                    {!selectedCustomerId && <span className="text-red-400">*</span>}
                   </label>
                   <div className="relative">
-                    <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input value={customer}
-                      onChange={e => { setCustomer(e.target.value); if (errors.customer) setErrors(p => ({ ...p, customer: '' })); }}
-                      placeholder="e.g. Amaka Okonkwo"
+                    <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <input
+                      value={customer}
+                      onChange={(e) => {
+                        setCustomer(e.target.value);
+                        if (selectedCustomerId) clearCustomerSelection();
+                        setCustomerSearch(e.target.value);
+                        setShowCustomerDropdown(true);
+                        if (errors.customer) setErrors(p => ({ ...p, customer: '' }));
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                      placeholder="Search customer or type walk-in name…"
                       className={`w-full pl-8 pr-3 py-2.5 text-sm rounded-xl border outline-none transition-all
                         ${errors.customer
                           ? 'border-red-300 bg-red-50'
-                          : 'border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100'
+                          : selectedCustomerId
+                            ? 'border-green-300 bg-green-50'
+                            : 'border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100'
                         }`}
                     />
+                    {/* Customer suggestions dropdown */}
+                    {showCustomerDropdown && filteredCustomers.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto">
+                        {filteredCustomers.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); selectCustomer(c); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-green-50 transition-colors text-left"
+                          >
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                              style={{ background: c.color, color: c.textColor }}>
+                              {c.initials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-800 truncate">
+                                {c.firstName} {c.lastName}
+                              </p>
+                              <p className="text-[10px] text-gray-400 truncate">{c.phone}</p>
+                            </div>
+                            <span className="text-[9px] font-bold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                              {c.type}
+                            </span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setShowCustomerDropdown(false);
+                            setSelectedCustomerId(null);
+                          }}
+                          className="w-full text-center py-2 text-[10px] font-semibold text-gray-400 hover:bg-gray-50 border-t border-gray-100"
+                        >
+                          Use as walk-in customer (no link)
+                        </button>
+                      </div>
+                    )}
                   </div>
+                  {selectedCustomerId && (
+                    <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1">
+                      <CheckCircle size={10} /> Customer linked — sale will be recorded against this customer.
+                    </p>
+                  )}
                   {errors.customer && (
                     <p className="text-[11px] text-red-500 mt-1">⚠ {errors.customer}</p>
                   )}
@@ -304,8 +468,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
                     </p>
                     <p className="text-xs text-green-700 font-bold">Subtotal</p>
                   </div>
-                  <p className="text-lg font-extrabold text-green-600 tabular-nums"
-                    style={{ fontFamily: 'sans-serif' }}>
+                  <p className="text-lg font-extrabold text-green-600 tabular-nums">
                     {naira(subtotal)}
                   </p>
                 </div>
@@ -342,8 +505,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
                 </div>
                 <div className="border-t border-gray-200 pt-3 flex items-center justify-between">
                   <span className="text-sm font-bold text-gray-700">Total</span>
-                  <span className="text-xl font-extrabold text-green-600 tabular-nums"
-                    style={{ fontFamily: 'sans-serif' }}>
+                  <span className="text-xl font-extrabold text-green-600 tabular-nums">
                     {naira(subtotal)}
                   </span>
                 </div>
@@ -400,6 +562,12 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
               </div>
 
               {/* Action buttons */}
+              {errors.submit && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-red-700 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-red-100 flex items-center justify-center text-[8px] font-bold flex-shrink-0 mt-0.5">!</span>
+                  <span className="flex-1 break-words">{errors.submit}</span>
+                </div>
+              )}
               <div className="flex gap-3">
                 <button onClick={() => setStep(1)}
                   className="flex items-center gap-2 flex-1 justify-center py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all">

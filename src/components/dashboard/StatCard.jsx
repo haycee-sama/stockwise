@@ -68,7 +68,7 @@ export default function StatCard({
       {/* Value */}
       <div className="mb-1">
         <p className="text-[28px] font-extrabold text-gray-900 leading-none animate-fade-up"
-          style={{ fontFamily: 'sans-serif', animationDelay: animDelay }}>
+          style={{ animationDelay: animDelay }}>
           {formatValue(value, valueType)}
         </p>
       </div>

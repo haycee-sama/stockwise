@@ -1,10 +1,16 @@
 // src/pages/ExpensesPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Search, ChevronDown, Download, Edit2, Trash2,
   Receipt, TrendingDown, Calendar, Tag, CreditCard,
   Banknote, Building2, X, SlidersHorizontal, AlertTriangle,
+  Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench,
 } from 'lucide-react';
+
+// P2-005 fix: mock expense categories use a lowercase `icon` field
+// (Lucide name string), not a capitalised `Icon` property. Map the
+// string to the Lucide component before rendering.
+const catIconMap = { Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench };
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, AreaChart, Area,
@@ -12,8 +18,13 @@ import {
 import TopBar             from '../components/layout/TopBar';
 import ExpenseModal       from '../components/expenses/ExpenseModal';
 import ExpenseDeleteModal from '../components/expenses/ExpenseDeleteModal';
+import { expensesService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
 import {
-  expensesData, expenseCategories, expensePaymentMethods, expenseTrend,
+  expenseCategories as staticCategories,
+  expensePaymentMethods as staticPaymentMethods,
+  expenseTrend as staticTrend,
 } from '../data/mockData';
 
 const naira = (v) => {
@@ -53,8 +64,7 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, sub, subColor, 
         </div>
         <div className="min-w-0">
           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-0.5 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate"
-            style={{ fontFamily: 'sans-serif' }}>{value}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate">{value}</p>
           {sub && <p className={`text-[11px] font-semibold mt-0.5 ${subColor ?? 'text-gray-400'}`}>{sub}</p>}
         </div>
       </div>
@@ -77,7 +87,7 @@ function CategoryBreakdown({ expenses }) {
     const totals = {};
     expenses.forEach(e => { totals[e.category] = (totals[e.category] ?? 0) + e.amount; });
     const grand = Object.values(totals).reduce((s, v) => s + v, 0);
-    return expenseCategories
+    return staticCategories
       .map(cat => ({ ...cat, total: totals[cat.id] ?? 0, pct: grand > 0 ? ((totals[cat.id] ?? 0) / grand) * 100 : 0 }))
       .filter(c => c.total > 0)
       .sort((a, b) => b.total - a.total);
@@ -85,7 +95,7 @@ function CategoryBreakdown({ expenses }) {
   const grand = breakdown.reduce((s, c) => s + c.total, 0);
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm h-full">
-      <h3 className="text-sm font-bold text-gray-900 mb-1" style={{ fontFamily: 'sans-serif' }}>
+      <h3 className="text-sm font-bold text-gray-900 mb-1">
         Breakdown by Category
       </h3>
       <p className="text-xs text-gray-400 mb-5">Where your money goes</p>
@@ -94,7 +104,7 @@ function CategoryBreakdown({ expenses }) {
       ) : (
         <div className="space-y-4">
           {breakdown.map(cat => {
-            const Icon = cat.Icon;
+            const Icon = catIconMap[cat.icon] ?? Wrench;
             return (
               <div key={cat.id}>
                 <div className="flex items-center justify-between mb-1.5">
@@ -107,7 +117,7 @@ function CategoryBreakdown({ expenses }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-bold text-gray-400">{cat.pct.toFixed(0)}%</span>
-                    <span className="text-xs font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(cat.total)}</span>
+                    <span className="text-xs font-extrabold text-gray-900 tabular-nums">{naira(cat.total)}</span>
                   </div>
                 </div>
                 <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -119,7 +129,7 @@ function CategoryBreakdown({ expenses }) {
           })}
           <div className="flex items-center justify-between pt-3 mt-1 border-t border-gray-100">
             <span className="text-xs font-bold text-gray-600">Total</span>
-            <span className="text-sm font-extrabold text-gray-900 tabular-nums" style={{ fontFamily: 'sans-serif' }}>{naira(grand)}</span>
+            <span className="text-sm font-extrabold text-gray-900 tabular-nums">{naira(grand)}</span>
           </div>
         </div>
       )}
@@ -128,7 +138,10 @@ function CategoryBreakdown({ expenses }) {
 }
 
 export default function ExpensesPage() {
-  const [expenses, setExpenses]     = useState(expensesData);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [expenses, setExpenses]     = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [categoryFilter, setCategory] = useState('all');
   const [paymentFilter, setPayment] = useState('All');
@@ -136,6 +149,29 @@ export default function ExpensesPage() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editExpense, setEdit]      = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, expense: null });
+
+  const fetchExpenses = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await expensesService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setExpenses([]);
+      } else {
+        setExpenses(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setExpenses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -147,7 +183,7 @@ export default function ExpensesPage() {
     const catTotals = {};
     thisMonth.forEach(e => { catTotals[e.category] = (catTotals[e.category] ?? 0) + e.amount; });
     const topId  = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const topCat = expenseCategories.find(c => c.id === topId);
+    const topCat = staticCategories.find(c => c.id === topId);
     return {
       thisMonth:  thisMonth.reduce((s, e) => s + e.amount, 0),
       thisWeek:   thisWeek.reduce((s, e) => s + e.amount, 0),
@@ -172,23 +208,37 @@ export default function ExpensesPage() {
   const openEdit = useCallback((e) => { setEdit(e);    setModalOpen(true); }, []);
   const openDel  = useCallback((e) => setDeleteModal({ open: true, expense: e }), []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    const isExisting = expenses.some(e => String(e.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await expensesService.update(saved.id, payload)
+      : await expensesService.create(payload);
+    if (svcErr) {
+      console.error('[ExpensesPage] save failed:', svcErr);
+      return;
+    }
     setExpenses(prev =>
-      prev.some(e => e.id === saved.id)
-        ? prev.map(e => e.id === saved.id ? saved : e)
-        : [saved, ...prev]
+      prev.some(e => String(e.id) === String(persisted.id))
+        ? prev.map(e => String(e.id) === String(persisted.id) ? persisted : e)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [expenses, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setExpenses(prev => prev.filter(e => e.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await expensesService.remove(id);
+    if (svcErr) {
+      console.error('[ExpensesPage] delete failed:', svcErr);
+      return;
+    }
+    setExpenses(prev => prev.filter(e => String(e.id) !== String(id)));
   }, []);
 
   const hasFilters = search || categoryFilter !== 'all' || paymentFilter !== 'All';
 
   const headerActions = (
     <>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+      <button disabled title="Coming soon" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Download size={14} /><span className="hidden sm:inline">Export</span>
       </button>
       <button onClick={openAdd}
@@ -203,7 +253,20 @@ export default function ExpensesPage() {
       <TopBar title="Expenses" subtitle="Track your business spending" actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading expenses…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchExpenses} />
+        )}
+
+        {!loading && !error && (
+          <>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Receipt}     iconBg="bg-red-100"    iconColor="text-red-500"    label="This Month"    value={naira(stats.thisMonth)}    sub="Current month"     subColor="text-red-500"    delay="0.05s" />
           <StatCard icon={Calendar}    iconBg="bg-amber-100"  iconColor="text-amber-600"  label="This Week"     value={naira(stats.thisWeek)}     sub="Last 7 days"       subColor="text-amber-600"  delay="0.10s" />
@@ -214,10 +277,10 @@ export default function ExpensesPage() {
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
           <div className="lg:col-span-3 bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm">
-            <h3 className="text-sm font-bold text-gray-900 mb-1" style={{ fontFamily: 'sans-serif' }}>Monthly Trend</h3>
+            <h3 className="text-sm font-bold text-gray-900 mb-1">Monthly Trend</h3>
             <p className="text-xs text-gray-400 mb-5">6-month spend overview</p>
             <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={expenseTrend}>
+              <AreaChart data={staticTrend}>
                 <defs>
                   <linearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.15} />
@@ -248,8 +311,8 @@ export default function ExpensesPage() {
               {expenses.length}
             </span>
           </button>
-          {expenseCategories.filter(cat => expenses.some(e => e.category === cat.id)).map(cat => {
-            const Icon  = cat.Icon;
+          {staticCategories.filter(cat => expenses.some(e => e.category === cat.id)).map(cat => {
+            const Icon  = catIconMap[cat.icon] ?? Wrench;
             const count = expenses.filter(e => e.category === cat.id).length;
             const isActive = categoryFilter === cat.id;
             return (
@@ -276,7 +339,7 @@ export default function ExpensesPage() {
                 placeholder="Search by name, vendor..."
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
+                <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
               )}
             </div>
             <button onClick={() => setShowFilters(v => !v)}
@@ -295,7 +358,7 @@ export default function ExpensesPage() {
                 <select value={paymentFilter} onChange={e => setPayment(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
                   <option value="All">All Payments</option>
-                  {expensePaymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
+                  {staticPaymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -315,7 +378,7 @@ export default function ExpensesPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Receipt size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2" style={{ fontFamily: 'sans-serif' }}>No expenses found</h3>
+            <h3 className="text-base font-bold text-gray-700 mb-2">No expenses found</h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
               {search ? `No results for "${search}".` : 'Start recording your business expenses.'}
             </p>
@@ -331,14 +394,14 @@ export default function ExpensesPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr>
                     {['Expense', 'Category', 'Vendor', 'Amount', 'Payment', 'Date', 'Actions'].map(h => (
-                      <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">{h}</th>
+                      <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(expense => {
-                    const cat  = expenseCategories.find(c => c.id === expense.category);
-                    const Icon = cat?.Icon;
+                    const cat  = staticCategories.find(c => c.id === expense.category);
+                    const Icon = cat ? (catIconMap[cat.icon] ?? Wrench) : Wrench;
                     return (
                       <tr key={expense.id} className="border-b border-gray-50 last:border-0 hover:bg-red-50/10 transition-colors group">
                         <td className="px-4 py-3.5">
@@ -378,11 +441,11 @@ export default function ExpensesPage() {
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openEdit(expense)}
-                              className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all" title="Edit">
+                              className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all" aria-label="Edit" title="Edit">
                               <Edit2 size={12} />
                             </button>
                             <button onClick={() => openDel(expense)}
-                              className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all" title="Delete">
+                              className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all" aria-label="Delete" title="Delete">
                               <Trash2 size={12} />
                             </button>
                           </div>
@@ -402,9 +465,11 @@ export default function ExpensesPage() {
             <span className="hidden sm:block">Filtered total: <strong className="text-red-500">₦{filtered.reduce((s,e) => s + e.amount, 0).toLocaleString()}</strong></span>
           </div>
         )}
+                </>
+        )}
       </main>
 
-      <ExpenseModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editExpense={editExpense} />
+      <ExpenseModal key={editExpense?.id ?? 'new'} isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} editExpense={editExpense} />
       <ExpenseDeleteModal isOpen={deleteModal.open} expense={deleteModal.expense} onClose={() => setDeleteModal({ open: false, expense: null })} onConfirm={handleDelete} />
     </div>
   );

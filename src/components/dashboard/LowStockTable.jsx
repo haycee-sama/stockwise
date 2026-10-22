@@ -1,8 +1,37 @@
 // src/components/dashboard/LowStockTable.jsx
 import { ArrowRight, AlertTriangle, ShoppingCart, Package } from 'lucide-react';
-import { lowStockItems } from '../../data/mockData';
+import { dashboardService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
+import { useState, useEffect } from 'react';
+import { LoadingState, ErrorState } from '../common/ResourceState';
 
 export default function LowStockTable() {
+  const { activeBusinessId } = useBusiness();
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true); setError(null);
+      const { data: svcData, error: svcError } = await dashboardService.lowStockList({ businessId: activeBusinessId });
+      if (!active) return;
+      if (svcError) { setError(svcError); setItems(null); }
+      else { setItems(svcData ?? []); }
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  if (loading) return <LoadingState label="Loading low stock…" />;
+  if (error) return <ErrorState error={error} />;
+  if (!items || items.length === 0) return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-350">
+      <div className="px-5 sm:px-6 py-4 border-b border-gray-100"><h3 className="text-sm font-bold text-gray-900">Low Stock Alerts</h3></div>
+      <div className="py-8 text-center text-gray-400 text-sm">All items are well stocked.</div>
+    </div>
+  );
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up delay-350">
       {/* Header */}
@@ -12,8 +41,7 @@ export default function LowStockTable() {
             <AlertTriangle size={15} className="text-amber-500" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-gray-900"
-              style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-sm font-bold text-gray-900">
               Low Stock Alerts
             </h3>
             <p className="text-[11px] text-gray-400">Items needing restocking</p>
@@ -29,14 +57,14 @@ export default function LowStockTable() {
         <table className="w-full min-w-[380px]">
           <thead>
             <tr className="border-b border-gray-50">
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-5 sm:px-6 py-2.5">Product</th>
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Stock</th>
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Status</th>
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Action</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-5 sm:px-6 py-2.5">Product</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Stock</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Status</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Action</th>
             </tr>
           </thead>
           <tbody>
-            {lowStockItems.map(item => {
+            {(items ?? []).map(item => {
               const pct        = Math.min((item.stock / item.threshold) * 100, 100);
               const isCritical = item.status === 'critical';
 

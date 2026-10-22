@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
 export default function LoginForm() {
   const navigate = useNavigate();
@@ -69,6 +69,11 @@ export default function LoginForm() {
     <div>
       {/* Header */}
       <div className="mb-8">
+        {/* h1 for landmark + heading hierarchy (page-level h1 is on the
+            branding panel for desktop; mobile uses this sr-only h1 so
+            screen-reader users have a clear page title without the
+            duplicate visible heading). */}
+        <h1 className="sr-only">Sign in to Stockwise</h1>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back</h2>
         <p className="text-gray-500">Sign in to your Stockwise account</p>
       </div>
@@ -87,19 +92,24 @@ export default function LoginForm() {
         
         {/* Email Field */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1.5">
             Email address
           </label>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none" aria-hidden="true">
               <Mail className={`w-4.5 h-4.5 ${errors.email ? 'text-red-400' : 'text-gray-400'}`} size={18} />
             </div>
             <input
+              id="login-email"
               type="email"
               name="email"
+              required
+              autoComplete="email"
               value={formData.email}
               onChange={handleChange}
               placeholder="you@business.com"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? 'login-email-error' : undefined}
               className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all duration-200 outline-none
                 ${errors.email 
                   ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-2 focus:ring-red-100' 
@@ -108,8 +118,8 @@ export default function LoginForm() {
             />
           </div>
           {errors.email && (
-            <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-              <span>⚠</span> {errors.email}
+            <p id="login-email-error" role="alert" className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
+              <span aria-hidden="true">⚠</span> {errors.email}
             </p>
           )}
         </div>
@@ -117,7 +127,7 @@ export default function LoginForm() {
         {/* Password Field */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-sm font-medium text-gray-700">
+            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">
               Password
             </label>
             <Link 
@@ -128,15 +138,20 @@ export default function LoginForm() {
             </Link>
           </div>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none" aria-hidden="true">
               <Lock className={`${errors.password ? 'text-red-400' : 'text-gray-400'}`} size={18} />
             </div>
             <input
+              id="login-password"
               type={showPassword ? 'text' : 'password'}
               name="password"
+              required
+              autoComplete="current-password"
               value={formData.password}
               onChange={handleChange}
               placeholder="Enter your password"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? 'login-password-error' : undefined}
               className={`w-full pl-10 pr-12 py-3 rounded-xl border text-sm transition-all duration-200 outline-none
                 ${errors.password 
                   ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-2 focus:ring-red-100' 
@@ -147,14 +162,15 @@ export default function LoginForm() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
               className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600"
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
           {errors.password && (
-            <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-              <span>⚠</span> {errors.password}
+            <p id="login-password-error" role="alert" className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
+              <span aria-hidden="true">⚠</span> {errors.password}
             </p>
           )}
         </div>
@@ -194,7 +210,7 @@ export default function LoginForm() {
       {/* Divider */}
       <div className="my-6 flex items-center gap-4">
         <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-xs text-gray-400 font-medium">OR</span>
+        <span className="text-xs text-gray-500 font-medium">OR</span>
         <div className="flex-1 h-px bg-gray-200" />
       </div>
 

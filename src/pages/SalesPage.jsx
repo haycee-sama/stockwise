@@ -1,5 +1,5 @@
 // src/pages/SalesPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Download, Search, ChevronDown, Eye,
   Printer, CheckCircle, Clock, XCircle,
@@ -10,7 +10,10 @@ import {
 import TopBar        from '../components/layout/TopBar';
 import NewSaleModal  from '../components/sales/NewSaleModal';
 import ViewOrderModal from '../components/sales/ViewOrderModal';
-import { salesData as initialSales } from '../data/mockData';
+import { salesService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+
 
 // ── Helpers ──────────────────────────────────────
 const naira = (v) => {
@@ -54,7 +57,7 @@ const statusConfig = {
 const paymentConfig = {
   Cash:     { icon: Banknote,   cls: 'bg-blue-50 text-blue-700'     },
   Transfer: { icon: Building2,  cls: 'bg-purple-50 text-purple-700' },
-  POS:      { icon: CreditCard, cls: 'bg-orange-50 text-orange-700' },
+  Card:     { icon: CreditCard, cls: 'bg-orange-50 text-orange-700' },
 };
 
 // ── Status Badge ──────────────────────────────────
@@ -90,8 +93,7 @@ function SummaryCard({ icon: Icon, iconBg, iconColor, label, value, sub, subColo
         </div>
         <div className="min-w-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate tabular-nums"
-            style={{ fontFamily: 'sans-serif' }}>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate tabular-nums">
             {value}
           </p>
           {sub && (
@@ -115,7 +117,7 @@ function SaleCard({ order, onView }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-            style={{ background: order.customer.color, color: order.customer.textColor, fontFamily: 'sans-serif' }}>
+            style={{ background: order.customer.color, color: order.customer.textColor }}>
             {order.customer.initials}
           </div>
           <div>
@@ -123,8 +125,7 @@ function SaleCard({ order, onView }) {
             <p className="text-[11px] text-gray-400 font-mono">#{order.id}</p>
           </div>
         </div>
-        <p className="text-base font-extrabold text-gray-900 tabular-nums"
-          style={{ fontFamily: 'sans-serif' }}>
+        <p className="text-base font-extrabold text-gray-900 tabular-nums">
           {naira(order.total)}
         </p>
       </div>
@@ -153,13 +154,39 @@ function SaleCard({ order, onView }) {
 
 // ── Main Page ─────────────────────────────────────
 export default function SalesPage() {
-  const [sales, setSales]           = useState(initialSales);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [sales, setSales]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatus]   = useState('All');
   const [paymentFilter, setPayment] = useState('All');
   const [newSaleOpen, setNewSale]   = useState(false);
   const [viewOrder, setViewOrder]   = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  const fetchSales = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await salesService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setSales([]);
+      } else {
+        setSales(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setSales([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchSales(); }, [fetchSales]);
 
   // ── Stats ─────────────────────────────────────
   const stats = useMemo(() => {
@@ -196,16 +223,68 @@ export default function SalesPage() {
   }, [sales, search, statusFilter, paymentFilter]);
 
   // ── Handlers ─────────────────────────────────
-  const handleNewSale = useCallback((order) => {
-    setSales(prev => [order, ...prev]);
-  }, []);
+  const handleNewSale = useCallback(async (order) => {
+    // The NewSaleModal's payload shape is the legacy mock format
+    // (customer: {name, initials, color, textColor}, items: [{name, qty, price}]).
+    // The Supabase-backed salesService.create() translates this to the
+    // RPC payload shape expected by sw_create_sale (business_id,
+    // customer_id, items: [{item_id, qty, unit_price}]).
+    //
+    // NOTE: the current NewSaleModal passes a free-text customer name
+    // (not a customer_id). The salesService.create() in Supabase mode
+    // currently passes customer_id: null — the sale is created with no
+    // linked customer. A future refactor of NewSaleModal to use a
+    // customer-picker would set customer_id from the selected customer.
+    //
+    // The sw_create_sale RPC validates:
+    //   - business_id (RLS-checked)
+    //   - each item_id exists in the active business
+    //   - each qty > 0 AND qty <= item.stock (cannot oversell)
+    //   - each unit_price >= 0
+    //   - status in ('completed', 'pending', 'cancelled')
+    // The RPC computes the total server-side (client-supplied totals
+    // are IGNORED). If any check fails, the WHOLE sale rolls back —
+    // no partial state (no orphaned sale header, no decremented stock,
+    // no ledger entry).
+    //
+    // The NewSaleModal currently passes items as [{name, qty, price}]
+    // — these are item NAMES, not item_ids. The Supabase-backed
+    // service needs item_ids. For Phase 3B v1, we map by name lookup
+    // via the inventory service. If an item name doesn't match, the
+    // sale is rejected.
+    const payload = {
+      businessId: activeBusinessId,
+      customerName: order.customer?.name,
+      customerId: order.customerId ?? null,
+      items: order.items.map(i => ({
+        itemId:    i.itemId,
+        name:      i.name,
+        qty:       i.qty,
+        unitPrice: i.unitPrice,
+      })),
+      payment: order.payment,
+      status: order.status ?? 'completed',
+      note: order.note,
+    };
+    const { data: persisted, error: svcErr } = await salesService.create(payload);
+    if (svcErr) {
+      console.error('[SalesPage] create sale failed:', svcErr);
+      // Do NOT update local state — the server didn't persist.
+      // The modal stays open + the user can fix the issue.
+      return { success: false, message: svcErr.message };
+    }
+    if (persisted) {
+      setSales(prev => [persisted, ...prev]);
+    }
+    return { success: true };
+  }, [activeBusinessId]);
 
   const openView = useCallback((order) => setViewOrder(order), []);
 
   // TopBar actions
   const headerActions = (
     <>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+      <button disabled title="Coming soon" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Download size={14} />
         <span className="hidden sm:inline">Export</span>
       </button>
@@ -228,7 +307,20 @@ export default function SalesPage() {
       />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — sales are in-memory only. Configure Supabase to persist via the atomic sw_create_sale RPC.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading sales…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchSales} />
+        )}
+
+        {!loading && !error && (
+          <>
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <SummaryCard icon={TrendingUp} iconBg="bg-green-100" iconColor="text-green-600"
@@ -272,6 +364,7 @@ export default function SalesPage() {
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
                 <button onClick={() => setSearch('')}
+                  aria-label="Clear search"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                   <X size={14} />
                 </button>
@@ -321,7 +414,7 @@ export default function SalesPage() {
                   <option value="All">All Payments</option>
                   <option value="Cash">Cash</option>
                   <option value="Transfer">Transfer</option>
-                  <option value="POS">POS</option>
+                  <option value="Card">Card / POS</option>
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -351,7 +444,7 @@ export default function SalesPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <ShoppingBag size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2" style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-base font-bold text-gray-700 mb-2">
               No orders found
             </h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
@@ -383,7 +476,7 @@ export default function SalesPage() {
                   <thead className="bg-gray-50/80 border-b border-gray-100">
                     <tr>
                       {['Order ID', 'Customer', 'Items', 'Total', 'Payment', 'Date', 'Status', 'Actions'].map(h => (
-                        <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3 whitespace-nowrap">
+                        <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3 whitespace-nowrap">
                           {h}
                         </th>
                       ))}
@@ -405,7 +498,7 @@ export default function SalesPage() {
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-                              style={{ background: order.customer.color, color: order.customer.textColor, fontFamily: 'sans-serif' }}>
+                              style={{ background: order.customer.color, color: order.customer.textColor }}>
                               {order.customer.initials}
                             </div>
                             <span className="text-sm font-semibold text-gray-800 truncate max-w-[120px]">
@@ -453,11 +546,13 @@ export default function SalesPage() {
                           <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openView(order)}
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"
+                              aria-label="View order"
                               title="View order">
                               <Eye size={13} />
                             </button>
                             <button
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-100 text-gray-400 transition-all"
+                              aria-label="Print receipt"
                               title="Print receipt">
                               <Printer size={13} />
                             </button>
@@ -483,6 +578,8 @@ export default function SalesPage() {
               </strong>
             </span>
           </div>
+        )}
+                </>
         )}
       </main>
 

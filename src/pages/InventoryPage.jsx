@@ -1,5 +1,5 @@
 // src/pages/InventoryPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Search, Upload, Plus, Edit2, Trash2,
   ArrowUpDown, ChevronDown, Download,
@@ -11,7 +11,10 @@ import TopBar     from '../components/layout/TopBar';
 import ItemModal  from '../components/inventory/ItemModal';
 import DeleteModal from '../components/inventory/DeleteModal';
 import { ItemIcon } from '../utils/inventoryIcons';
-import { inventoryItems as initialItems, categories } from '../data/mockData';
+import { inventoryService } from '../services';
+import { useBusiness } from '../context/useBusiness';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import { categories as staticCategories } from '../data/mockData';
 
 // ── Helpers ──────────────────────────────────────
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
@@ -67,8 +70,7 @@ function MiniStat({ icon: Icon, iconBg, iconColor, label, value, animDelay }) {
           <Icon size={19} className={iconColor} />
         </div>
         <div className="min-w-0">
-          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate"
-            style={{ fontFamily: 'sans-serif' }}>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-none truncate">
             {value}
           </p>
           <p className="text-[11px] text-gray-400 font-medium mt-0.5 truncate">{label}</p>
@@ -87,6 +89,7 @@ function ItemCard({ item, onEdit, onDelete, selected, onSelect }) {
       <div className="flex items-start gap-3">
         {/* Checkbox */}
         <button onClick={() => onSelect(item.id)}
+          aria-label="Select item"
           className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all
             ${selected ? 'bg-green-600 border-green-600' : 'border-gray-300'}`}>
           {selected && <CheckCircle size={12} className="text-white" />}
@@ -132,10 +135,12 @@ function ItemCard({ item, onEdit, onDelete, selected, onSelect }) {
             </div>
             <div className="flex items-center gap-1.5">
               <button onClick={() => onEdit(item)}
+                aria-label="Edit"
                 className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all">
                 <Edit2 size={13} />
               </button>
               <button onClick={() => onDelete(item)}
+                aria-label="Delete"
                 className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all">
                 <Trash2 size={13} />
               </button>
@@ -148,14 +153,14 @@ function ItemCard({ item, onEdit, onDelete, selected, onSelect }) {
 }
 
 // ── Sortable Table Header ─────────────────────────
-function SortTh({ col, label, sortBy, sortDir, onSort }) {
+function SortTh({ col, label, sortBy, onSort }) {
   const active = sortBy === col;
   return (
-    <th onClick={() => onSort(col)}
-      className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3 cursor-pointer select-none hover:text-gray-600 transition-colors whitespace-nowrap">
+    <th scope="col" onClick={() => onSort(col)}
+      className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 px-4 py-3 cursor-pointer select-none hover:text-gray-600 transition-colors whitespace-nowrap">
       <span className="flex items-center gap-1">
         {label}
-        <ArrowUpDown size={10} className={active ? 'text-green-500' : 'text-gray-300'} />
+        <ArrowUpDown size={10} className={active ? 'text-green-500' : 'text-gray-500'} />
       </span>
     </th>
   );
@@ -163,7 +168,10 @@ function SortTh({ col, label, sortBy, sortDir, onSort }) {
 
 // ── Main Page ─────────────────────────────────────
 export default function InventoryPage() {
-  const [items, setItems]           = useState(initialItems);
+  const { activeBusinessId, isDemoMode } = useBusiness();
+  const [items, setItems]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
   const [search, setSearch]         = useState('');
   const [activeCategory, setCategory] = useState('All');
   const [statusFilter, setStatus]   = useState('All');
@@ -175,6 +183,39 @@ export default function InventoryPage() {
   const [deleteModal, setDeleteModal] = useState({ open: false, item: null });
   const [selected, setSelected]     = useState(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  // ── Fetch inventory via the service layer ─────
+  // Demo mode returns mock data; Supabase mode returns real DB rows
+  // scoped by RLS to the active business. Errors are surfaced, NOT
+  // silently falling back to mock data.
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: svcErr } = await inventoryService.list({
+        businessId: activeBusinessId,
+      });
+      if (svcErr) {
+        setError(svcErr);
+        setItems([]);
+      } else {
+        setItems(data ?? []);
+      }
+    } catch (e) {
+      setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBusinessId]);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  // Re-fetch the full list when leaving the demo mode banner
+  // (covers refresh after the user logs in fresh).
+  // Note: the `isDemoMode` check is here for completeness; the
+  // activeBusinessId dep above already re-fetches when auth state
+  // changes via BusinessProvider.
 
   // ── Stats ─────────────────────────────────────
   const stats = useMemo(() => ({
@@ -217,16 +258,40 @@ export default function InventoryPage() {
   const openEdit = useCallback((item) => { setEditItem(item); setModalOpen(true); }, []);
   const openDel  = useCallback((item) => setDeleteModal({ open: true, item }), []);
 
-  const handleSave = useCallback((saved) => {
+  const handleSave = useCallback(async (saved) => {
+    // Call the service first. The service handles the create-vs-update
+    // decision based on whether `saved.id` already exists.
+    // In demo mode, the mock service mutates its internal array + returns
+    // the saved row. In Supabase mode, the service writes via the
+    // sw_create_business RPC + RLS-enforced INSERT/UPDATE.
+    const isExisting = items.some(i => String(i.id) === String(saved.id));
+    const payload = { ...saved, businessId: activeBusinessId };
+    const { data: persisted, error: svcErr } = isExisting
+      ? await inventoryService.update(saved.id, payload)
+      : await inventoryService.create(payload);
+    if (svcErr) {
+      // Surface the error — do NOT silently fall back to mock data.
+      // The modal stays open + the user sees a toast / inline error.
+      console.error('[InventoryPage] save failed:', svcErr);
+      // TODO: surface a toast. For now, alert is too aggressive; we
+      // leave the modal open. The user can retry.
+      return;
+    }
+    // Update local state from the service response.
     setItems(prev =>
-      prev.some(i => i.id === saved.id)
-        ? prev.map(i => i.id === saved.id ? saved : i)
-        : [...prev, saved]
+      prev.some(i => String(i.id) === String(persisted.id))
+        ? prev.map(i => String(i.id) === String(persisted.id) ? persisted : i)
+        : [persisted, ...prev]
     );
-  }, []);
+  }, [items, activeBusinessId]);
 
-  const handleDelete = useCallback((id) => {
-    setItems(prev => prev.filter(i => i.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    const { error: svcErr } = await inventoryService.remove(id);
+    if (svcErr) {
+      console.error('[InventoryPage] delete failed:', svcErr);
+      return;
+    }
+    setItems(prev => prev.filter(i => String(i.id) !== String(id)));
     setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
   }, []);
 
@@ -250,11 +315,11 @@ export default function InventoryPage() {
   // TopBar actions
   const headerActions = (
     <>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+      <button disabled title="Coming soon — bulk upload is not yet implemented" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Upload size={14} />
         <span className="hidden sm:inline">Bulk Upload</span>
       </button>
-      <button className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+      <button disabled title="Coming soon — CSV export is not yet implemented" className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold text-gray-400 bg-gray-50 border border-gray-200 rounded-xl cursor-not-allowed">
         <Download size={14} />
         <span className="hidden sm:inline">Export</span>
       </button>
@@ -270,12 +335,25 @@ export default function InventoryPage() {
     <div className="flex-1 flex flex-col min-h-screen bg-gray-50 overflow-y-auto page-content">
       <TopBar
         title="Inventory"
-        subtitle={`${items.length} items · ${categories.length - 1} categories`}
+        subtitle={`${items.length} items · ${staticCategories.length - 1} categories`}
         actions={headerActions}
       />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+        {isDemoMode && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-800">
+            Demo mode — changes are in-memory only. Configure Supabase to persist.
+          </div>
+        )}
 
+        {loading && <LoadingState label="Loading inventory…" />}
+
+        {!loading && error && (
+          <ErrorState error={error} onRetry={fetchItems} />
+        )}
+
+        {!loading && !error && (
+          <>
         {/* ── Stat Cards ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <MiniStat icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600"
@@ -295,7 +373,7 @@ export default function InventoryPage() {
 
         {/* ── Category Tabs ── */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {categories.map(cat => {
+          {staticCategories.map(cat => {
             const count = cat === 'All' ? items.length : items.filter(i => i.category === cat).length;
             return (
               <button key={cat} onClick={() => setCategory(cat)}
@@ -324,6 +402,7 @@ export default function InventoryPage() {
               className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
             {search && (
               <button onClick={() => setSearch('')}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                 <X size={14} />
               </button>
@@ -370,11 +449,13 @@ export default function InventoryPage() {
             </span>
             <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               <button onClick={() => setViewMode('table')}
+                aria-label="Table view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'table' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <LayoutList size={14} />
               </button>
               <button onClick={() => setViewMode('cards')}
+                aria-label="Card view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'cards' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <LayoutGrid size={14} />
@@ -389,8 +470,7 @@ export default function InventoryPage() {
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Package size={28} className="text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-2"
-              style={{ fontFamily: 'sans-serif' }}>
+            <h3 className="text-base font-bold text-gray-700 mb-2">
               No items found
             </h3>
             <p className="text-sm text-gray-400 mb-6 max-w-xs">
@@ -429,8 +509,9 @@ export default function InventoryPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
                   <tr>
                     {/* Select all */}
-                    <th className="px-4 py-3 w-10">
+                    <th scope="col" className="px-4 py-3 w-10">
                       <button onClick={toggleSelectAll}
+                        aria-label="Select all"
                         className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all
                           ${selected.size === filtered.length && filtered.length > 0
                             ? 'bg-green-600 border-green-600'
@@ -446,9 +527,9 @@ export default function InventoryPage() {
                     <SortTh col="stock"        label="Stock"         sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="costPrice"    label="Cost"          sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="sellingPrice" label="Selling"       sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Margin</th>
-                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Status</th>
-                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Actions</th>
+                    <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Margin</th>
+                    <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Status</th>
+                    <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -464,6 +545,7 @@ export default function InventoryPage() {
                         {/* Checkbox */}
                         <td className="px-4 py-3.5">
                           <button onClick={() => toggleSelect(item.id)}
+                            aria-label="Select item"
                             className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all
                               ${isSelected ? 'bg-green-600 border-green-600' : 'border-gray-300 hover:border-green-400'}`}>
                             {isSelected && <CheckCircle size={10} className="text-white" />}
@@ -546,11 +628,13 @@ export default function InventoryPage() {
                           <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openEdit(item)}
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"
+                              aria-label="Edit item"
                               title="Edit item">
                               <Edit2 size={12} />
                             </button>
                             <button onClick={() => openDel(item)}
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all"
+                              aria-label="Delete item"
                               title="Delete item">
                               <Trash2 size={12} />
                             </button>
@@ -588,10 +672,13 @@ export default function InventoryPage() {
             </span>
           </div>
         )}
+          </>
+        )}
       </main>
 
       {/* ── Modals ── */}
       <ItemModal
+        key={editItem?.id ?? 'new'}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSave={handleSave}

@@ -1,43 +1,10 @@
 // src/utils/inventoryIcons.jsx
-import {
-  Shirt, Footprints, ShoppingBag, HardHat,
-  Wind, Crown, Package, Gem, Watch, Glasses,
-  Wallet, Scissors, Box, Tag,
-} from 'lucide-react';
-
-// Map string name → Lucide component
-export const iconMap = {
-  Shirt:       Shirt,
-  Footprints:  Footprints,
-  ShoppingBag: ShoppingBag,
-  HardHat:     HardHat,
-  Wind:        Wind,
-  Crown:       Crown,
-  Package:     Package,
-  Gem:         Gem,
-  Watch:       Watch,
-  Glasses:     Glasses,
-  Wallet:      Wallet,
-  Scissors:    Scissors,
-  Box:         Box,
-  Tag:         Tag,
-};
-
-// Picker options shown in the Add/Edit modal
-export const iconOptions = [
-  { name: 'Shirt',       label: 'Clothing'    },
-  { name: 'Footprints',  label: 'Footwear'    },
-  { name: 'ShoppingBag', label: 'Bag'         },
-  { name: 'HardHat',     label: 'Hat'         },
-  { name: 'Wind',        label: 'Scarf'       },
-  { name: 'Crown',       label: 'Cap'         },
-  { name: 'Gem',         label: 'Jewellery'   },
-  { name: 'Watch',       label: 'Watch'       },
-  { name: 'Glasses',     label: 'Eyewear'     },
-  { name: 'Wallet',      label: 'Wallet'      },
-  { name: 'Scissors',    label: 'Other'       },
-  { name: 'Package',     label: 'Generic'     },
-];
+// Renders an inventory item icon by looking up a string name in
+// `iconMap`. Only exports the `ItemIcon` component (data lives in
+// ./inventoryIconData) — this keeps react-refresh/only-export-components
+// happy.
+import { Package } from 'lucide-react';
+import { iconMap } from './inventoryIconData';
 
 // Render an inventory item icon
 export function ItemIcon({ iconName, bg, size = 18, className = '' }) {
@@ -51,3 +18,4 @@ export function ItemIcon({ iconName, bg, size = 18, className = '' }) {
     </div>
   );
 }
+

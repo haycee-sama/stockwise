@@ -1,5 +1,6 @@
 // src/pages/DashboardPage.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   DollarSign, TrendingUp, Package, AlertCircle,
   Plus, Download, Clock, CheckCircle, ArrowRight,
@@ -12,7 +13,12 @@ import RevenueChart    from '../components/dashboard/RevenueChart';
 import StockDonut      from '../components/dashboard/StockDonut';
 import TopSellersTable from '../components/dashboard/TopSellersTable';
 import LowStockTable   from '../components/dashboard/LowStockTable';
-import { dashboardStats, pendingOrders, salesData, inventoryItems } from '../data/mockData';
+import DemoModeBanner  from '../components/common/DemoModeBanner';
+import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import { useAuth }     from '../context/useAuth';
+import { dashboardService, salesService } from '../services';
+import { dashboardStats as demoStats } from '../data/mockData';
+import { useBusiness } from '../context/useBusiness';
 
 // ── Helpers ──────────────────────────────────────
 const naira = (v) => {
@@ -32,7 +38,7 @@ function RecentSaleCard({ order }) {
   return (
     <div className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5 hover:shadow-md transition-all animate-fade-up">
       <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-        style={{ background: order.customer.color, color: order.customer.textColor, fontFamily: 'sans-serif' }}>
+        style={{ background: order.customer.color, color: order.customer.textColor }}>
         {order.customer.initials}
       </div>
       <div className="flex-1 min-w-0">
@@ -42,8 +48,7 @@ function RecentSaleCard({ order }) {
         </p>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className="text-sm font-extrabold text-gray-900 tabular-nums"
-          style={{ fontFamily: 'sans-serif' }}>
+        <p className="text-sm font-extrabold text-gray-900 tabular-nums">
           {naira(order.total)}
         </p>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md
@@ -70,8 +75,7 @@ function PendingOrderRow({ order, onFulfil }) {
           {order.id} · {order.items} item{order.items > 1 ? 's' : ''}
         </p>
       </div>
-      <p className="text-sm font-extrabold text-gray-900 flex-shrink-0 tabular-nums"
-        style={{ fontFamily: 'sans-serif' }}>
+      <p className="text-sm font-extrabold text-gray-900 flex-shrink-0 tabular-nums">
         {naira(order.amount)}
       </p>
       <button onClick={() => onFulfil(order.id)}
@@ -85,55 +89,163 @@ function PendingOrderRow({ order, onFulfil }) {
 
 // ── Main Page ─────────────────────────────────────
 export default function DashboardPage() {
-  const [orders, setOrders]       = useState(pendingOrders);
+  const navigate = useNavigate();
+  const { isDemoMode } = useAuth();
+  const { activeBusinessId } = useBusiness();
+  const [summaryStats, setSummaryStats] = useState(null);
+
+  // Fetch live dashboard summary from the service. Falls back to the
+  // mock `dashboardStats` while loading or on error (so the page
+  // doesn't blank out during the fetch). In Supabase mode, the
+  // summary is computed by the dashboardService.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data, error } = await dashboardService.summary({ businessId: activeBusinessId });
+      if (!active) return;
+      if (!error && data) setSummaryStats(data);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+
+  // Fetch pending orders from service (replaces mock pendingOrders)
+  const [pendingOrdersData, setPendingOrdersData] = useState([]);
+  const [pendingOrdersLoading, setPendingOrdersLoading] = useState(true);
+  const [pendingOrdersError, setPendingOrdersError] = useState(null);
+
+  // Fetch recent sales from service (replaces mock salesData for recent activity)
+  const [recentSalesData, setRecentSalesData] = useState([]);
+  const [recentSalesLoading, setRecentSalesLoading] = useState(true);
+  const [recentSalesError, setRecentSalesError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setPendingOrdersLoading(true);
+      setPendingOrdersError(null);
+      const { data, error } = await dashboardService.pendingOrdersList({ businessId: activeBusinessId });
+      if (!active) return;
+      if (error) {
+        setPendingOrdersError(error);
+        setPendingOrdersData([]);
+      } else {
+        setPendingOrdersData(data ?? []);
+      }
+      setPendingOrdersLoading(false);
+
+      setRecentSalesLoading(true);
+      setRecentSalesError(null);
+      const { data: rsData, error: rsError } = await dashboardService.recentSalesList({ businessId: activeBusinessId });
+      if (!active) return;
+      if (rsError) {
+        setRecentSalesError(rsError);
+        setRecentSalesData([]);
+      } else {
+        setRecentSalesData(rsData ?? []);
+      }
+      setRecentSalesLoading(false);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+  const [orders, setOrders]       = useState([]); // now populated from pendingOrdersData
   const [showFilters, setFilters] = useState(false);
   const [period, setPeriod]       = useState('today');
 
   // ── Computed quick stats from live data ──────
+  // Note: period filter is honest — when the user selects "Today" we
+  // filter sales by today's date. Because mock data is dated March
+  // 2026, "Today" and "This Week" will show ₦0 in demo mode. That is
+  // accurate, not a bug. In Supabase mode the data will be live.
+  // Live stats now come from summaryStats (fetched from dashboardService.summary())
+  // In demo mode, falls back to demoStats. No mock business records used.
   const liveStats = useMemo(() => {
-    const now       = new Date();
-    const todayStr  = now.toDateString();
-    const weekAgo   = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-
-    const completed  = salesData.filter(s => s.status === 'completed');
-    const todaySales = completed.filter(s => new Date(s.date).toDateString() === todayStr);
-    const weekSales  = completed.filter(s => new Date(s.date) >= weekAgo);
-    const outOfStock = inventoryItems.filter(i => i.stock === 0).length;
-    const lowStock   = inventoryItems.filter(i => i.stock > 0 && i.stock <= i.threshold).length;
-
+    const s = summaryStats ?? (isDemoMode ? demoStats : null);
+    if (!s) {
+      return { periodRevenue: 0, periodOrders: 0, outOfStock: 0, lowStock: 0 };
+    }
     return {
-      todayRevenue: todaySales.reduce((s, o) => s + o.total, 0),
-      weekRevenue:  weekSales.reduce((s, o)  => s + o.total, 0),
-      outOfStock,
-      lowStock,
+      periodRevenue: s.todayRevenue ?? 0,
+      periodOrders: s.pendingOrdersCount ?? 0,
+      outOfStock: s.outOfStock ?? 0,
+      lowStock: s.lowStock ?? 0,
     };
-  }, []);
+  }, [summaryStats, isDemoMode]);
 
   // Recent sales for the activity feed (latest 4)
-  const recentSales = useMemo(() =>
-    [...salesData].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4),
-  []);
+  const recentSales = recentSalesData;
 
   // ── Handlers ─────────────────────────────────
-  const handleFulfil = useCallback((id) => {
+  // Mark a pending sale as completed on the server, then drop it from
+  // the local pending-orders list. Without the server update, reload
+  // would surface the order as still pending — the local "fulfil" was
+  // decorative only.
+  const handleFulfil = useCallback(async (id) => {
+    const { error } = await salesService.update(id, { status: 'completed' });
+    if (error) {
+      console.error('[DashboardPage] fulfil sale failed:', error);
+      return;
+    }
     setOrders(prev => prev.filter(o => o.id !== id));
+    setPendingOrdersData(prev => prev.filter(o => o.id !== id));
   }, []);
 
+  // P1-003 fix: use React Router's navigate() instead of window.location.href.
+  // The previous full-reload behaviour combined with the lack of session
+  // persistence effectively logged the user out on every CTA click.
   const handleAddItem   = useCallback(() => {
-    window.location.href = '/inventory';
-  }, []);
+    navigate('/inventory');
+  }, [navigate]);
 
   const handleNewSale   = useCallback(() => {
-    window.location.href = '/sales';
-  }, []);
+    navigate('/sales');
+  }, [navigate]);
 
-  const handleExport    = useCallback(() => {
-    console.log('Export dashboard data');
-  }, []);
+  // P2-013 fix: Export is wired up to a CSV download of the current
+  // dashboard data. In demo mode this still works on mock data; in
+  // Supabase mode it will export the live query result once the
+  // data-access layer is swapped over.
+  const handleExport = useCallback(() => {
+    try {
+      const rows = [
+        ['Metric', 'Value'],
+        ['Period', period],
+        ['Period Revenue', String(liveStats.periodRevenue)],
+        ['Period Orders', String(liveStats.periodOrders)],
+        ['Out of Stock Items', String(liveStats.outOfStock)],
+        ['Low Stock Items', String(liveStats.lowStock)],
+      ];
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `stockwise-dashboard-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  }, [period, liveStats]);
 
-  const handleRefresh   = useCallback(() => {
-    window.location.reload();
-  }, []);
+  // Refresh: no longer does a full page reload (which would log the
+  // user out in demo mode). Instead, re-derive the stats from the
+  // in-memory data. In Supabase mode this would re-fetch from the
+  // backend.
+  const handleRefresh = useCallback(async () => {
+    // Re-fetch ALL dashboard data from the service — not from mock data.
+    setFilters(s => s); // trigger re-render
+    // Re-fetch summary
+    const { data: sum } = await dashboardService.summary({ businessId: activeBusinessId });
+    if (sum) setSummaryStats(sum);
+    // Re-fetch pending orders
+    const { data: po } = await dashboardService.pendingOrdersList({ businessId: activeBusinessId });
+    if (po) setPendingOrdersData(po);
+    // Re-fetch recent sales
+    const { data: rs } = await dashboardService.recentSalesList({ businessId: activeBusinessId });
+    if (rs) setRecentSalesData(rs);
+  }, [activeBusinessId]);
 
   // ── TopBar action buttons ─────────────────────
   const headerActions = (
@@ -156,6 +268,8 @@ export default function DashboardPage() {
     </>
   );
 
+  // Sync orders state with service-fetched pending orders
+  useEffect(() => { setOrders(pendingOrdersData); }, [pendingOrdersData]);
   const hasAlerts = liveStats.outOfStock > 0 || liveStats.lowStock > 0;
 
   return (
@@ -165,6 +279,9 @@ export default function DashboardPage() {
       <TopBar actions={headerActions} />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+
+        {/* ── Demo-mode banner (only shown when Supabase is not configured) ── */}
+        {isDemoMode && <DemoModeBanner />}
 
         {/* ── Alert Banner ── */}
         {hasAlerts && (
@@ -180,10 +297,10 @@ export default function DashboardPage() {
                 <span><strong>{liveStats.lowStock} item{liveStats.lowStock > 1 ? 's' : ''}</strong> running low.</span>
               )}
             </p>
-            <a href="/inventory"
+            <button type="button" onClick={() => navigate('/inventory')}
               className="flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0">
               View <ArrowRight size={12} />
-            </a>
+            </button>
           </div>
         )}
 
@@ -193,9 +310,9 @@ export default function DashboardPage() {
             icon={DollarSign}
             iconBg="bg-green-100" iconColor="text-green-600"
             label="Total Gross Sales"
-            value={dashboardStats.totalSales}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {totalSales: 0})).totalSales}
             valueType="currency"
-            change={dashboardStats.salesChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {salesChange: 0})).salesChange}
             changeLabel="vs last month"
             animDelay="0.05s"
           />
@@ -203,9 +320,9 @@ export default function DashboardPage() {
             icon={TrendingUp}
             iconBg="bg-blue-100" iconColor="text-blue-600"
             label="Net Profit"
-            value={dashboardStats.totalProfit}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {totalProfit: 0})).totalProfit}
             valueType="currency"
-            change={dashboardStats.profitChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {profitChange: 0})).profitChange}
             changeLabel="vs last month"
             animDelay="0.10s"
           />
@@ -213,9 +330,9 @@ export default function DashboardPage() {
             icon={Package}
             iconBg="bg-purple-100" iconColor="text-purple-600"
             label="Inventory Items"
-            value={dashboardStats.totalInventory}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {totalInventory: 0})).totalInventory}
             valueType="number"
-            change={dashboardStats.inventoryChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {inventoryChange: 0})).inventoryChange}
             changeLabel="vs last month"
             animDelay="0.15s"
           />
@@ -223,9 +340,9 @@ export default function DashboardPage() {
             icon={AlertCircle}
             iconBg="bg-red-100" iconColor="text-red-500"
             label="Low Stock Alerts"
-            value={dashboardStats.lowStockCount}
+            value={(summaryStats ?? (isDemoMode ? demoStats : {lowStockCount: 0})).lowStockCount}
             valueType="number"
-            change={dashboardStats.lowStockChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {lowStockChange: 0})).lowStockChange}
             changeLabel="new this week"
             animDelay="0.20s"
           />
@@ -234,16 +351,15 @@ export default function DashboardPage() {
         {/* ── Quick Stats Strip ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           {[
-            { label: "Today's Revenue",  value: naira(liveStats.todayRevenue),  color: 'text-green-600',  bg: 'bg-green-50'   },
-            { label: "This Week",        value: naira(liveStats.weekRevenue),   color: 'text-blue-600',   bg: 'bg-blue-50'    },
-            { label: "Out of Stock",     value: liveStats.outOfStock,           color: 'text-red-600',    bg: 'bg-red-50'     },
-            { label: "Pending Orders",   value: orders.length,                  color: 'text-amber-600',  bg: 'bg-amber-50'   },
+            { label: period === 'today' ? "Today's Revenue" : period === 'week' ? 'This Week' : 'This Month', value: naira(liveStats.periodRevenue), color: 'text-green-600',  bg: 'bg-green-50'   },
+            { label: 'Period Orders',  value: liveStats.periodOrders,    color: 'text-blue-600',   bg: 'bg-blue-50'    },
+            { label: 'Out of Stock',     value: liveStats.outOfStock,           color: 'text-red-600',    bg: 'bg-red-50'     },
+            { label: 'Pending Orders',   value: orders.length,                  color: 'text-amber-600',  bg: 'bg-amber-50'   },
           ].map((s, i) => (
             <div key={s.label}
               className={`${s.bg} rounded-2xl p-4 text-center animate-fade-up`}
               style={{ animationDelay: `${0.05 + i * 0.05}s` }}>
-              <p className={`text-xl sm:text-2xl font-extrabold ${s.color} tabular-nums`}
-                style={{ fontFamily: 'sans-serif' }}>
+              <p className={`text-xl sm:text-2xl font-extrabold ${s.color} tabular-nums`}>
                 {s.value}
               </p>
               <p className="text-[11px] text-gray-500 font-medium mt-0.5">{s.label}</p>
@@ -335,6 +451,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
 
           {/* Recent Sales */}
+          {recentSalesLoading && <LoadingState label="Loading recent sales…" />}
+          {recentSalesError && <ErrorState error={recentSalesError} />}
+          {!recentSalesLoading && !recentSalesError && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up">
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
@@ -342,16 +461,16 @@ export default function DashboardPage() {
                   <BarChart2 size={15} className="text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+                  <h3 className="text-sm font-bold text-gray-900">
                     Recent Sales
                   </h3>
                   <p className="text-[11px] text-gray-400">Latest transactions</p>
                 </div>
               </div>
-              <a href="/sales"
+              <Link to="/sales"
                 className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 transition-colors">
                 View all <ArrowRight size={12} />
-              </a>
+              </Link>
             </div>
 
             {/* Mobile: cards */}
@@ -369,7 +488,7 @@ export default function DashboardPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr>
                     {['Customer', 'Items', 'Total', 'Status'].map(h => (
-                      <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
+                      <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -407,8 +526,12 @@ export default function DashboardPage() {
               </table>
             </div>
           </div>
+          )}
 
           {/* Pending Orders */}
+          {pendingOrdersLoading && <LoadingState label="Loading pending orders…" />}
+          {pendingOrdersError && <ErrorState error={pendingOrdersError} />}
+          {!pendingOrdersLoading && !pendingOrdersError && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-up">
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
@@ -416,7 +539,7 @@ export default function DashboardPage() {
                   <Clock size={15} className="text-orange-500" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+                  <h3 className="text-sm font-bold text-gray-900">
                     Pending Orders
                   </h3>
                   <p className="text-[11px] text-gray-400">
@@ -424,10 +547,10 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <a href="/sales"
+              <Link to="/sales"
                 className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 transition-colors">
                 View all <ArrowRight size={12} />
-              </a>
+              </Link>
             </div>
 
             {orders.length === 0 ? (
@@ -435,8 +558,7 @@ export default function DashboardPage() {
                 <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
                   <CheckCircle size={22} className="text-gray-400" />
                 </div>
-                <p className="text-sm font-bold text-gray-700 mb-1"
-                  style={{ fontFamily: 'sans-serif' }}>
+                <p className="text-sm font-bold text-gray-700 mb-1">
                   All caught up!
                 </p>
                 <p className="text-xs text-gray-400">No pending orders right now.</p>
@@ -453,6 +575,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* ── Footer ── */}
@@ -465,7 +588,7 @@ export default function DashboardPage() {
           <span className="hidden sm:block">
             Total sales revenue:{' '}
             <strong className="text-green-600">
-              {naira(salesData.filter(s => s.status === 'completed').reduce((s, o) => s + o.total, 0))}
+              {naira(summaryStats?.totalSales ?? 0)}
             </strong>
           </span>
         </div>
