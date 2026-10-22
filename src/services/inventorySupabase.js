@@ -12,7 +12,7 @@
 //   also writes the stock_movements ledger entry atomically.
 //
 // Requires:
-// - `sw_inventory_items` table + RLS policies (supabase/migrations/0001 + 0002).
+// - `sw_inventory_items` table + RLS policies (see docs/BACKEND_HANDOVER.md).
 // - The caller must be authenticated (Supabase Auth session).
 
 import { supabase } from '../lib/supabase';

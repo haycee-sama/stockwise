@@ -5,7 +5,7 @@
 // - Password change.
 // - Sign-out everywhere (revoke all sessions).
 // All of these require a configured Supabase project (or REST backend).
-// See docs/BACKEND_HANDOVER.md §9.
+// See docs/BACKEND_HANDOVER.md (Section F, outstanding integration tasks).
 
 import ComingSoon from '../components/common/ComingSoon';
 

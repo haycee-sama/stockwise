@@ -401,7 +401,7 @@ export default function ExpensesPage() {
                 <tbody>
                   {filtered.map(expense => {
                     const cat  = staticCategories.find(c => c.id === expense.category);
-                    const Icon = cat?.Icon;
+                    const Icon = cat ? (catIconMap[cat.icon] ?? Wrench) : Wrench;
                     return (
                       <tr key={expense.id} className="border-b border-gray-50 last:border-0 hover:bg-red-50/10 transition-colors group">
                         <td className="px-4 py-3.5">

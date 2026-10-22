@@ -1,6 +1,6 @@
 // src/services/reportsMock.js
 // Mock data-access layer for the Reports page aggregates.
-// See docs/BACKEND_HANDOVER.md §7.8–7.10.
+// See docs/BACKEND_HANDOVER.md.
 
 import {
   salesTrendData, paymentBreakdown, topProductsReport,

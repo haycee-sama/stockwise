@@ -43,10 +43,24 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
     setSaving(true);
     await new Promise(r => setTimeout(r, 800));
 
+    // Build the validated line-items array once — used both for the
+    // `items` count (display) and the `lineItems` payload (Supabase
+    // insert). Without the array, the Supabase-backed placeOrder would
+    // receive `items: <number>` and crash on `.filter()` inside the
+    // service's line-item mapping step.
+    const validItems = orderItems
+      .filter(r => r.name.trim() && Number(r.qty) > 0 && Number(r.unitPrice) > 0)
+      .map(r => ({
+        name: r.name.trim(),
+        qty: Number(r.qty),
+        unitPrice: Number(r.unitPrice),
+      }));
+
     const newOrder = {
       id:     `PO-${String(__poCounter++)}`,
       date:   new Date().toISOString().slice(0, 10),
-      items:  orderItems.filter(r => r.name.trim()).length,
+      items:  validItems.length,
+      lineItems: validItems,
       total,
       status: 'pending',
       note,

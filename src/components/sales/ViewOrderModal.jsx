@@ -23,7 +23,7 @@ const statusConfig = {
 const paymentConfig = {
   Cash:     { icon: Banknote,   label: 'Cash',          color: 'text-blue-600'   },
   Transfer: { icon: Building2,  label: 'Bank Transfer',  color: 'text-purple-600' },
-  POS:      { icon: CreditCard, label: 'POS Terminal',   color: 'text-orange-600' },
+  Card:     { icon: CreditCard, label: 'Card / POS',     color: 'text-orange-600' },
 };
 
 export default function ViewOrderModal({ isOpen, order, onClose }) {

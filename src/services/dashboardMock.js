@@ -1,5 +1,5 @@
 // src/services/dashboardMock.js
-// Mock data-access layer for dashboard aggregates. See docs/BACKEND_HANDOVER.md §7.
+// Mock data-access layer for dashboard aggregates. See docs/BACKEND_HANDOVER.md.
 
 import {
   dashboardStats, revenueData, stockStatusData,

@@ -1,5 +1,5 @@
 // src/services/vendorsMock.js
-// Mock data-access layer for vendors / suppliers. See docs/BACKEND_HANDOVER.md §5.
+// Mock data-access layer for vendors / suppliers. See docs/BACKEND_HANDOVER.md.
 
 import { vendorsData as mockVendors, vendorCategories, vendorStatuses } from '../data/mockData';
 

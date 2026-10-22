@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import {
   Download, TrendingUp, TrendingDown, ShoppingBag,
   Package, Users, Receipt, DollarSign, Target,
-  BarChart2, AlertTriangle,
+  BarChart2, AlertTriangle, Calendar,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -297,14 +297,14 @@ function SalesReport({ reports = {} }) {
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
                   <Pie data={reports.sales?.paymentBreakdown ?? fallbackPayment} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value" strokeWidth={0}>
-                    {reports.sales?.paymentBreakdown ?? fallbackPayment.map(e => <Cell key={e.name} fill={e.color} />)}
+                    {(reports.sales?.paymentBreakdown ?? fallbackPayment).map(e => <Cell key={e.name} fill={e.color} />)}
                   </Pie>
                   <Tooltip content={<DonutTip />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="space-y-2 mt-2">
-              {reports.sales?.paymentBreakdown ?? fallbackPayment.map(item => (
+              {(reports.sales?.paymentBreakdown ?? fallbackPayment).map(item => (
                 <div key={item.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
@@ -323,25 +323,33 @@ function SalesReport({ reports = {} }) {
 
 // ── Inventory Report ──────────────────────────────
 function InventoryReport({ reports = {} }) {
-  const totalItems = reports.inventory?.categoryReport ?? fallbackInvCat.reduce((s, c) => s + c.items, 0);
-  const totalValue = reports.inventory?.categoryReport ?? fallbackInvCat.reduce((s, c) => s + c.value, 0);
+  const categoryReport = reports.inventory?.categoryReport ?? fallbackInvCat;
+  const lowStock = reports.inventory?.lowStock ?? [];
+  const totalItems = categoryReport.reduce((s, c) => s + Number(c.items ?? 0), 0);
+  const totalValue = categoryReport.reduce((s, c) => s + Number(c.value ?? 0), 0);
+  // Derive stock-health counts from the lowStock list. The service
+  // returns items where `stock <= threshold`; we split that into
+  // out-of-stock (stock === 0) and low-stock (0 < stock <= threshold).
+  const outOfStockCount = lowStock.filter(i => Number(i.stock) === 0).length;
+  const lowStockCount = lowStock.length - outOfStockCount;
+  const inStockCount = Math.max(0, totalItems - lowStock.length);
   const stockHealth = [
-    { name: 'In Stock',     value: 875, color: '#16a34a' },
-    { name: 'Low Stock',    value: 263, color: '#f59e0b' },
-    { name: 'Out of Stock', value: 110, color: '#ef4444' },
+    { name: 'In Stock',     value: inStockCount,  color: '#16a34a' },
+    { name: 'Low Stock',    value: lowStockCount, color: '#f59e0b' },
+    { name: 'Out of Stock', value: outOfStockCount, color: '#ef4444' },
   ];
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiPill value={totalItems.toLocaleString()} label="Total Items"     color="text-blue-600"   bg="bg-blue-50"   />
-        <KpiPill value={naira(totalValue)}           label="Inventory Value" color="text-green-600"  bg="bg-green-50"  />
-        <KpiPill value="875"                         label="In Stock"        color="text-emerald-600" bg="bg-emerald-50" />
-        <KpiPill value="110"                         label="Out of Stock"    color="text-red-500"    bg="bg-red-50"    />
+        <KpiPill value={totalItems.toLocaleString()}     label="Total Items"     color="text-blue-600"   bg="bg-blue-50"   />
+        <KpiPill value={naira(totalValue)}                label="Inventory Value" color="text-green-600"  bg="bg-green-50"  />
+        <KpiPill value={inStockCount.toLocaleString()}    label="In Stock"        color="text-emerald-600" bg="bg-emerald-50" />
+        <KpiPill value={outOfStockCount.toLocaleString()} label="Out of Stock"    color="text-red-500"    bg="bg-red-50"    />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
         <ReportCard title="Inventory by Category" subtitle="Stock distribution & value" >
           <div className="lg:col-span-3 space-y-5">
-            {reports.inventory?.categoryReport ?? fallbackInvCat.map(cat => {
+            {(reports.inventory?.categoryReport ?? fallbackInvCat).map(cat => {
               const pct = (cat.items / totalItems) * 100;
               return (
                 <div key={cat.name}>
@@ -624,15 +632,15 @@ export default function ReportsPage() {
             );
           })}
           <div className="ml-auto flex items-center gap-2 text-xs text-gray-400 bg-white border border-gray-200 rounded-xl px-3 py-2 flex-shrink-0">
-            <div size={12} />
+            <Calendar size={12} />
             <span className="font-medium hidden sm:block">{periods.find(p => p.id === period)?.label}</span>
           </div>
         </div>
 
-        {activeTab === 'sales'     && <SalesReport     />}
+        {activeTab === 'sales'     && <SalesReport     reports={reports} />}
         {activeTab === 'inventory' && <InventoryReport reports={reports} />}
-        {activeTab === 'customers' && <CustomerReport  />}
-        {activeTab === 'expenses'  && <ExpensesReport  />}
+        {activeTab === 'customers' && <CustomerReport  reports={reports} />}
+        {activeTab === 'expenses'  && <ExpensesReport  reports={reports} />}
           </>
         )}
       </main>

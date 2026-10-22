@@ -251,8 +251,8 @@ export default function VendorsPage() {
 
   // Receive a purchase order — calls vendorsService.receivePurchaseOrder.
   // In demo mode: mock service marks the PO as delivered.
-  // In Supabase mode: calls the sw_receive_purchase_order RPC (requires
-  // migration 0004 to be applied — see docs/SUPABASE_SETUP.md).
+  // In Supabase mode: calls the sw_receive_purchase_order RPC (see
+  // docs/BACKEND_HANDOVER.md).
   // On success, updates the vendor's orders in local state.
   const handleReceive = useCallback(async (poId) => {
     const { error: svcErr } = await vendorsService.receivePurchaseOrder(poId);

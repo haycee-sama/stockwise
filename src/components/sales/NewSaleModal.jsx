@@ -17,7 +17,7 @@ const naira = (v) => `₦${Number(v).toLocaleString()}`;
 const paymentConfig = {
   Cash:     { icon: Banknote,   color: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-blue-300'   },
   Transfer: { icon: Building2,  color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-300' },
-  POS:      { icon: CreditCard, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-300' },
+  Card:     { icon: CreditCard, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-300' },
 };
 
 // ── Cart item row ─────────────────────────────────

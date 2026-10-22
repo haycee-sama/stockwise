@@ -57,7 +57,7 @@ const statusConfig = {
 const paymentConfig = {
   Cash:     { icon: Banknote,   cls: 'bg-blue-50 text-blue-700'     },
   Transfer: { icon: Building2,  cls: 'bg-purple-50 text-purple-700' },
-  POS:      { icon: CreditCard, cls: 'bg-orange-50 text-orange-700' },
+  Card:     { icon: CreditCard, cls: 'bg-orange-50 text-orange-700' },
 };
 
 // ── Status Badge ──────────────────────────────────
@@ -413,7 +413,7 @@ export default function SalesPage() {
                   <option value="All">All Payments</option>
                   <option value="Cash">Cash</option>
                   <option value="Transfer">Transfer</option>
-                  <option value="POS">POS</option>
+                  <option value="Card">Card / POS</option>
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>

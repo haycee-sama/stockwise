@@ -1,5 +1,5 @@
 // src/services/customersMock.js
-// Mock data-access layer for customers. See docs/BACKEND_HANDOVER.md §4.
+// Mock data-access layer for customers. See docs/BACKEND_HANDOVER.md.
 
 import { customersData as mockCustomers, customerTypes, customerStatuses } from '../data/mockData';
 
