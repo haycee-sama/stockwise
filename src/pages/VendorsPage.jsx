@@ -15,6 +15,7 @@ import { vendorsService } from '../services';
 import { useBusiness } from '../context/useBusiness';
 import { LoadingState, ErrorState } from '../components/common/ResourceState';
 import { vendorCategories as staticCategories, vendorStatuses as staticStatuses } from '../data/mockData';
+import Pagination from '../components/common/Pagination';
 
 const naira = (v) => {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -158,27 +159,35 @@ export default function VendorsPage() {
   const [drawer, setDrawer]         = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, vendor: null });
   const [orderModal, setOrderModal] = useState({ open: false, vendor: null });
+  const [page, setPage]             = useState(1);
+  const [pageSize, setPageSize]     = useState(25);
+  const [pagination, setPagination] = useState(null);
 
   const fetchVendors = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: svcErr } = await vendorsService.list({
+      const { data, error: svcErr, pagination: paginationInfo } = await vendorsService.list({
         businessId: activeBusinessId,
+        page,
+        pageSize,
       });
       if (svcErr) {
         setError(svcErr);
         setVendors([]);
+        setPagination(null);
       } else {
         setVendors(data ?? []);
+        if (paginationInfo) setPagination(paginationInfo);
       }
     } catch (e) {
       setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
       setVendors([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
-  }, [activeBusinessId]);
+  }, [activeBusinessId, page, pageSize]);
 
   useEffect(() => { fetchVendors(); }, [fetchVendors]);
 
@@ -328,11 +337,11 @@ export default function VendorsPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-[180px] max-w-sm">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
+              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
                 placeholder="Search vendor, items, location..."
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
-                <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
+                <button onClick={() => { setSearch(''); setPage(1); }} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
               )}
             </div>
             <button onClick={() => setShowFilters(v => !v)}
@@ -347,21 +356,21 @@ export default function VendorsPage() {
           {showFilters && (
             <div className="flex items-center gap-2 flex-wrap animate-fade-up">
               <div className="relative">
-                <select value={categoryFilter} onChange={e => setCategory(e.target.value)}
+                <select value={categoryFilter} onChange={e => { setCategory(e.target.value); setPage(1); }}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
                   {staticCategories.map(c => <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               <div className="relative">
-                <select value={statusFilter} onChange={e => setStatus(e.target.value)}
+                <select value={statusFilter} onChange={e => { setStatus(e.target.value); setPage(1); }}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
                   {staticStatuses.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               {(categoryFilter !== 'All' || statusFilter !== 'All' || search) && (
-                <button onClick={() => { setSearch(''); setCategory('All'); setStatus('All'); }}
+                <button onClick={() => { setSearch(''); setCategory('All'); setStatus('All'); setPage(1); }}
                   className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-700 px-2 py-1 transition-colors">
                   <X size={12} /> Clear
                 </button>
@@ -399,6 +408,16 @@ export default function VendorsPage() {
               <p className="text-sm font-bold">Add Vendor</p>
             </button>
           </div>
+        )}
+
+        {pagination && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={pagination.total}
+            onPageChange={setPage}
+            onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
+          />
         )}
 
         {filtered.length > 0 && (

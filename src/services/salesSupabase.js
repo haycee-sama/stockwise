@@ -22,22 +22,33 @@ import { supabase } from '../lib/supabase';
 
 function shapeRow(row) {
   if (!row) return null;
+  // Resolve the customer name from the PostgREST resource embedding
+  // (row.customer is populated by `.select('..., customer:customer_id(first_name, last_name)')`).
+  // When customer_id is null (walk-in customer), row.customer is null
+  // and we display 'Walk-in' honestly — not 'Unknown' (the previous
+  // behaviour implied the customer existed but couldn't be identified).
+  const cust = row.customer;
+  const customerName = cust
+    ? `${cust.first_name ?? ''} ${cust.last_name ?? ''}`.trim()
+    : null;
   return {
     id: row.display_id ?? row.id, // frontend displays display_id; uses id for API calls
     _uuid: row.id,
     customer: {
-      // TODO: when sw_customers is joined, populate this from customer_id.
-      // For now, the customer object is left as a placeholder — the
-      // frontend's NewSaleModal currently passes a free-text customer
-      // name, not a customer_id. This will need to be reconciled when
-      // the customer-picker is refactored.
-      name: row._customer_name ?? 'Unknown',
-      initials: '?',
+      name: customerName ?? 'Walk-in',
+      initials: cust
+        ? `${cust.first_name?.[0] ?? ''}${cust.last_name?.[0] ?? ''}`.toUpperCase() || '?'
+        : 'WI',
       color: '#dcfce7',
       textColor: '#15803d',
     },
     items: (row._items ?? []).map(si => ({
-      name: si._item_name ?? 'Unknown item',
+      // Resolve the inventory item name from the embedded resource
+      // (si.item is populated by `.select('..., item:item_id(name, sku)')`).
+      // If the inventory item has been soft-deleted AND the foreign-key
+      // relationship filters it out, si.item will be null — we display
+      // 'Unavailable item' honestly rather than fabricating a name.
+      name: si.item?.name ?? 'Unavailable item',
       qty: si.qty,
       price: Number(si.unit_price),
     })),
@@ -55,7 +66,10 @@ export async function list({ search = '', status = 'All', payment = 'All', page 
 
   let query = supabase
     .from('sw_sales')
-    .select('*', { count: 'exact' })
+    // Embed the customer name via PostgREST resource embedding
+    // (sw_sales.customer_id -> sw_customers.id). When customer_id is
+    // null (walk-in), `customer` will be null — shapeRow handles this.
+    .select('*, customer:customer_id(first_name, last_name)', { count: 'exact' })
     .is('deleted_at', null);
 
   if (status && status !== 'All') query = query.eq('status', status.toLowerCase());
@@ -69,19 +83,24 @@ export async function list({ search = '', status = 'All', payment = 'All', page 
   const { data: rawData, error, count } = await query;
   if (error) return { data: null, error: { code: error.code, message: error.message } };
 
-  // Fetch the line items for each sale in one batch.
+  // Fetch the line items for each sale in one batch. Embed the
+  // inventory item name + sku via PostgREST resource embedding
+  // (sw_sale_items.item_id -> sw_inventory_items.id) so the Sales
+  // page can display the actual product name — not 'Unknown item'.
+  // If the inventory item has been soft-deleted AND the FK
+  // relationship filters it out, `item` will be null and shapeRow
+  // renders 'Unavailable item' — honest about the missing relationship.
   const salesIds = (rawData ?? []).map(s => s.id);
   let itemsBySale = {};
   if (salesIds.length > 0) {
     const { data: lineItems, error: liErr } = await supabase
       .from('sw_sale_items')
-      .select('sale_id, qty, unit_price, item_id')
+      .select('sale_id, qty, unit_price, item_id, item:item_id(name, sku)')
       .in('sale_id', salesIds);
-    if (!liErr && lineItems) {
-      for (const li of lineItems) {
-        if (!itemsBySale[li.sale_id]) itemsBySale[li.sale_id] = [];
-        itemsBySale[li.sale_id].push(li);
-      }
+    if (liErr) return { data: null, error: { code: liErr.code, message: liErr.message } };
+    for (const li of (lineItems ?? [])) {
+      if (!itemsBySale[li.sale_id]) itemsBySale[li.sale_id] = [];
+      itemsBySale[li.sale_id].push(li);
     }
   }
 
@@ -99,18 +118,19 @@ export async function list({ search = '', status = 'All', payment = 'All', page 
 export async function get(id) {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
   // Try by UUID first, then by display_id. Both queries exclude
-  // soft-deleted sales — a deleted sale should return NOT_FOUND
-  // rather than its (now-stale) row data.
+  // soft-deleted sales AND embed the customer name via PostgREST
+  // resource embedding so the UI can display it without a separate
+  // sw_customers lookup.
   let { data: row, error } = await supabase
     .from('sw_sales')
-    .select('*')
+    .select('*, customer:customer_id(first_name, last_name)')
     .eq('id', id)
     .is('deleted_at', null)
     .maybeSingle();
   if (!row) {
     const r2 = await supabase
       .from('sw_sales')
-      .select('*')
+      .select('*, customer:customer_id(first_name, last_name)')
       .eq('display_id', id)
       .is('deleted_at', null)
       .maybeSingle();
@@ -120,11 +140,12 @@ export async function get(id) {
   if (error) return { data: null, error: { code: error.code, message: error.message } };
   if (!row) return { data: null, error: { code: 'NOT_FOUND', message: 'Sale not found' } };
 
-  // Fetch line items.
-  const { data: lineItems } = await supabase
+  // Fetch line items with the inventory item name + sku embedded.
+  const { data: lineItems, error: liErr } = await supabase
     .from('sw_sale_items')
-    .select('qty, unit_price, item_id')
+    .select('qty, unit_price, item_id, item:item_id(name, sku)')
     .eq('sale_id', row.id);
+  if (liErr) return { data: null, error: { code: liErr.code, message: liErr.message } };
   return { data: shapeRow({ ...row, _items: lineItems ?? [] }), error: null };
 }
 

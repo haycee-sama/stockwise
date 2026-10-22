@@ -15,6 +15,7 @@ import { inventoryService } from '../services';
 import { useBusiness } from '../context/useBusiness';
 import { LoadingState, ErrorState } from '../components/common/ResourceState';
 import { categories as staticCategories } from '../data/mockData';
+import Pagination from '../components/common/Pagination';
 
 // ── Helpers ──────────────────────────────────────
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
@@ -183,6 +184,9 @@ export default function InventoryPage() {
   const [deleteModal, setDeleteModal] = useState({ open: false, item: null });
   const [selected, setSelected]     = useState(new Set());
   const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage]             = useState(1);
+  const [pageSize, setPageSize]     = useState(25);
+  const [pagination, setPagination] = useState(null);
 
   // ── Fetch inventory via the service layer ─────
   // Demo mode returns mock data; Supabase mode returns real DB rows
@@ -192,22 +196,27 @@ export default function InventoryPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: svcErr } = await inventoryService.list({
+      const { data, error: svcErr, pagination: paginationInfo } = await inventoryService.list({
         businessId: activeBusinessId,
+        page,
+        pageSize,
       });
       if (svcErr) {
         setError(svcErr);
         setItems([]);
+        setPagination(null);
       } else {
         setItems(data ?? []);
+        if (paginationInfo) setPagination(paginationInfo);
       }
     } catch (e) {
       setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
       setItems([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
-  }, [activeBusinessId]);
+  }, [activeBusinessId, page, pageSize]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -252,6 +261,7 @@ export default function InventoryPage() {
   const toggleSort = useCallback((col) => {
     if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortBy(col); setSortDir('asc'); }
+    setPage(1);
   }, [sortBy]);
 
   const openAdd  = useCallback(() => { setEditItem(null); setModalOpen(true); }, []);
@@ -376,7 +386,7 @@ export default function InventoryPage() {
           {staticCategories.map(cat => {
             const count = cat === 'All' ? items.length : items.filter(i => i.category === cat).length;
             return (
-              <button key={cat} onClick={() => setCategory(cat)}
+              <button key={cat} onClick={() => { setCategory(cat); setPage(1); }}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0
                   ${activeCategory === cat
                     ? 'bg-green-600 text-white shadow-sm'
@@ -397,11 +407,11 @@ export default function InventoryPage() {
           {/* Search */}
           <div className="relative flex-1 min-w-[180px] max-w-sm">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
+            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search by name, SKU..."
               className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
             {search && (
-              <button onClick={() => setSearch('')}
+              <button onClick={() => { setSearch(''); setPage(1); }}
                 aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                 <X size={14} />
@@ -420,7 +430,7 @@ export default function InventoryPage() {
           {/* Status filter — always visible on desktop */}
           <div className={`${showFilters ? 'flex' : 'hidden sm:flex'} items-center gap-2`}>
             <div className="relative">
-              <select value={statusFilter} onChange={e => setStatus(e.target.value)}
+              <select value={statusFilter} onChange={e => { setStatus(e.target.value); setPage(1); }}
                 className="appearance-none pl-3 pr-8 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 transition-all font-medium text-gray-600 cursor-pointer">
                 <option value="All">All Status</option>
                 <option value="ok">In Stock</option>
@@ -647,6 +657,16 @@ export default function InventoryPage() {
               </table>
             </div>
           </div>
+        )}
+
+        {pagination && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={pagination.total}
+            onPageChange={setPage}
+            onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
+          />
         )}
 
         {/* ── Footer ── */}

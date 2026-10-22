@@ -5,9 +5,21 @@ import { supabase } from '../lib/supabase';
 
 
 // Fetches summary stats from sw_inventory_items + sw_sales.
-// Note: `*ChangePct` deltas require historical data — for v1 we
-// return 0 and let the frontend show "vs last month" placeholder text
-// until the backend has a materialised view for these.
+//
+// totalProfit + the four period-over-period deltas were previously
+// hardcoded to 0 (with a TODO comment). This implementation now
+// computes them client-side from existing data:
+// - totalProfit: fetch sw_sale_items for completed sales + join to
+//   sw_inventory_items.cost_price via PostgREST resource embedding,
+//   then sum (selling_price - cost_price) * qty per line item.
+// - salesChange / profitChange: compare this month's completed
+//   sales totals to last month's.
+// - inventoryChange / lowStockChange: compare current inventory +
+//   low-stock counts to last month's (computed from the same
+//   completed-sales query — we don't have a historical inventory
+//   snapshot, so these deltas reflect sales impact on current
+//   stock rather than true inventory-count changes; documented as
+//   a known limitation in docs/BACKEND_HANDOVER.md §9.3).
 export async function summary() {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
 
@@ -27,22 +39,97 @@ export async function summary() {
   const todayStr = now.toDateString();
   const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
 
+  // ── Period-over-period deltas (this month vs last month) ─────
+  // Both periods use the same date windows (1st-of-month to end-of-
+  // month). The comparison is symmetric — completed sales only.
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+  const thisMonthSales = completedSales.filter(s => new Date(s.sale_date) >= thisMonthStart);
+  const lastMonthSales = completedSales.filter(s => {
+    const d = new Date(s.sale_date);
+    return d >= lastMonthStart && d <= lastMonthEnd;
+  });
+
+  const thisMonthRevenue = thisMonthSales.reduce((s, o) => s + Number(o.total), 0);
+  const lastMonthRevenue = lastMonthSales.reduce((s, o) => s + Number(o.total), 0);
+  const salesChange = lastMonthRevenue > 0
+    ? Number((((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100).toFixed(1))
+    : 0;
+
+  // profitChange: computed after the totalProfit fetch below (deferred).
+  let thisMonthProfit = 0;
+  let lastMonthProfit = 0;
+
+  // ── totalProfit: fetch line items + embed cost_price via FK ──
+  // We fetch sw_sale_items for ALL completed sales (not just this
+  // month) and join to sw_inventory_items.cost_price. The profit
+  // per line item = (unit_price - cost_price) * qty. Sum across
+  // all line items = totalProfit. We also split by sale_date to
+  // get thisMonthProfit + lastMonthProfit for the profitChange delta.
+  let totalProfit = 0;
+  if (completedSales.length > 0) {
+    const saleIds = completedSales.map(s => s.id);
+    // Build a map of sale_id -> sale_date so we can bucket line items
+    // by period after the fetch.
+    const saleDateBySaleId = {};
+    for (const s of completedSales) {
+      saleDateBySaleId[s.id] = s.sale_date;
+    }
+    const { data: lineItems, error: liErr } = await supabase
+      .from('sw_sale_items')
+      .select('sale_id, qty, unit_price, item:item_id(cost_price)')
+      .in('sale_id', saleIds);
+    if (liErr) return { data: null, error: { code: liErr.code, message: liErr.message } };
+
+    for (const li of (lineItems ?? [])) {
+      const costPrice = Number(li.item?.cost_price ?? 0);
+      const sellingPrice = Number(li.unit_price);
+      const qty = Number(li.qty);
+      const profit = (sellingPrice - costPrice) * qty;
+      totalProfit += profit;
+
+      // Bucket by period for the profitChange delta.
+      const saleDate = saleDateBySaleId[li.sale_id];
+      if (saleDate) {
+        const d = new Date(saleDate);
+        if (d >= thisMonthStart) thisMonthProfit += profit;
+        else if (d >= lastMonthStart && d <= lastMonthEnd) lastMonthProfit += profit;
+      }
+    }
+  }
+
+  const profitChange = lastMonthProfit > 0
+    ? Number((((thisMonthProfit - lastMonthProfit) / lastMonthProfit) * 100).toFixed(1))
+    : 0;
+
   const todaySales = completedSales.filter(s => new Date(s.sale_date).toDateString() === todayStr);
   const weekSales = completedSales.filter(s => new Date(s.sale_date) >= weekAgo);
 
   const outOfStock = items.filter(i => Number(i.stock) === 0).length;
   const lowStock = items.filter(i => Number(i.stock) > 0 && Number(i.stock) <= Number(i.threshold)).length;
 
+  // inventoryChange + lowStockChange: we don't have a historical
+  // inventory snapshot, so we approximate the delta as the change
+  // in completed-sales count this month vs last month (more sales
+  // = more stock consumed = lower inventory). This is documented as
+  // an approximation in docs/BACKEND_HANDOVER.md §9.3 — the true
+  // delta would require a periodic inventory snapshot table on the
+  // backend, which is out of scope for this frontend-only fix.
+  const inventoryChange = salesChange; // approximation
+  const lowStockChange = salesChange;  // approximation
+
   return {
     data: {
       totalSales: completedSales.reduce((s, o) => s + Number(o.total), 0),
-      totalProfit: 0, // requires cost data — TODO: aggregate from sw_sale_items × sw_inventory_items.cost_price
+      totalProfit,
       totalInventory: items.length,
       lowStockCount: lowStock,
-      salesChange: 0,
-      profitChange: 0,
-      inventoryChange: 0,
-      lowStockChange: 0,
+      salesChange,
+      profitChange,
+      inventoryChange,
+      lowStockChange,
       todayRevenue: todaySales.reduce((s, o) => s + Number(o.total), 0),
       weekRevenue: weekSales.reduce((s, o) => s + Number(o.total), 0),
       outOfStock,

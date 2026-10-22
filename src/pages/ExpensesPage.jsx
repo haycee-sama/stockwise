@@ -26,6 +26,7 @@ import {
   expensePaymentMethods as staticPaymentMethods,
   expenseTrend as staticTrend,
 } from '../data/mockData';
+import Pagination from '../components/common/Pagination';
 
 const naira = (v) => {
   if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`;
@@ -149,27 +150,35 @@ export default function ExpensesPage() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editExpense, setEdit]      = useState(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, expense: null });
+  const [page, setPage]             = useState(1);
+  const [pageSize, setPageSize]     = useState(25);
+  const [pagination, setPagination] = useState(null);
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: svcErr } = await expensesService.list({
+      const { data, error: svcErr, pagination: paginationInfo } = await expensesService.list({
         businessId: activeBusinessId,
+        page,
+        pageSize,
       });
       if (svcErr) {
         setError(svcErr);
         setExpenses([]);
+        setPagination(null);
       } else {
         setExpenses(data ?? []);
+        if (paginationInfo) setPagination(paginationInfo);
       }
     } catch (e) {
       setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
       setExpenses([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
-  }, [activeBusinessId]);
+  }, [activeBusinessId, page, pageSize]);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -302,7 +311,7 @@ export default function ExpensesPage() {
 
         {/* Category tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <button onClick={() => setCategory('all')}
+          <button onClick={() => { setCategory('all'); setPage(1); }}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all flex-shrink-0
               ${categoryFilter === 'all' ? 'bg-green-600 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'}`}>
             All
@@ -316,7 +325,7 @@ export default function ExpensesPage() {
             const count = expenses.filter(e => e.category === cat.id).length;
             const isActive = categoryFilter === cat.id;
             return (
-              <button key={cat.id} onClick={() => setCategory(cat.id)}
+              <button key={cat.id} onClick={() => { setCategory(cat.id); setPage(1); }}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all flex-shrink-0
                   ${isActive ? 'bg-green-600 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'}`}>
                 {Icon && <Icon size={12} />}
@@ -335,11 +344,11 @@ export default function ExpensesPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-[180px] max-w-sm">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
+              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
                 placeholder="Search by name, vendor..."
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
-                <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
+                <button onClick={() => { setSearch(''); setPage(1); }} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
               )}
             </div>
             <button onClick={() => setShowFilters(v => !v)}
@@ -355,7 +364,7 @@ export default function ExpensesPage() {
           {showFilters && (
             <div className="flex items-center gap-2 flex-wrap animate-fade-up">
               <div className="relative">
-                <select value={paymentFilter} onChange={e => setPayment(e.target.value)}
+                <select value={paymentFilter} onChange={e => { setPayment(e.target.value); setPage(1); }}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none font-medium text-gray-600 cursor-pointer focus:border-green-400 transition-all">
                   <option value="All">All Payments</option>
                   {staticPaymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
@@ -363,7 +372,7 @@ export default function ExpensesPage() {
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               {hasFilters && (
-                <button onClick={() => { setSearch(''); setCategory('all'); setPayment('All'); }}
+                <button onClick={() => { setSearch(''); setCategory('all'); setPayment('All'); setPage(1); }}
                   className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-700 px-2 py-1 transition-colors">
                   <X size={12} /> Clear
                 </button>
@@ -457,6 +466,16 @@ export default function ExpensesPage() {
               </table>
             </div>
           </div>
+        )}
+
+        {pagination && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={pagination.total}
+            onPageChange={setPage}
+            onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
+          />
         )}
 
         {filtered.length > 0 && (

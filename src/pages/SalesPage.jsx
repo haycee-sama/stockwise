@@ -13,6 +13,7 @@ import ViewOrderModal from '../components/sales/ViewOrderModal';
 import { salesService } from '../services';
 import { useBusiness } from '../context/useBusiness';
 import { LoadingState, ErrorState } from '../components/common/ResourceState';
+import Pagination from '../components/common/Pagination';
 
 
 // ── Helpers ──────────────────────────────────────
@@ -164,27 +165,35 @@ export default function SalesPage() {
   const [newSaleOpen, setNewSale]   = useState(false);
   const [viewOrder, setViewOrder]   = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage]             = useState(1);
+  const [pageSize, setPageSize]     = useState(25);
+  const [pagination, setPagination] = useState(null);
 
   const fetchSales = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: svcErr } = await salesService.list({
+      const { data, error: svcErr, pagination: paginationInfo } = await salesService.list({
         businessId: activeBusinessId,
+        page,
+        pageSize,
       });
       if (svcErr) {
         setError(svcErr);
         setSales([]);
+        setPagination(null);
       } else {
         setSales(data ?? []);
+        if (paginationInfo) setPagination(paginationInfo);
       }
     } catch (e) {
       setError({ code: 'CAUGHT', message: e?.message ?? 'Unknown error' });
       setSales([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
-  }, [activeBusinessId]);
+  }, [activeBusinessId, page, pageSize]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
 
@@ -346,7 +355,7 @@ export default function SalesPage() {
             <p className="text-sm text-amber-800 font-medium flex-1">
               <strong>{stats.pending}</strong> pending order{stats.pending > 1 ? 's' : ''} need attention.
             </p>
-            <button onClick={() => setStatus('Pending')}
+            <button onClick={() => { setStatus('Pending'); setPage(1); }}
               className="flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0">
               View <ArrowRight size={12} />
             </button>
@@ -359,11 +368,11 @@ export default function SalesPage() {
             {/* Search */}
             <div className="relative flex-1 min-w-[180px] max-w-sm">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
+              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
                 placeholder="Search order, customer, item..."
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
-                <button onClick={() => setSearch('')}
+                <button onClick={() => { setSearch(''); setPage(1); }}
                   aria-label="Clear search"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                   <X size={14} />
@@ -397,7 +406,7 @@ export default function SalesPage() {
             <div className="flex items-center gap-2 flex-wrap animate-fade-up">
               {/* Status */}
               <div className="relative">
-                <select value={statusFilter} onChange={e => setStatus(e.target.value)}
+                <select value={statusFilter} onChange={e => { setStatus(e.target.value); setPage(1); }}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 transition-all font-medium text-gray-600 cursor-pointer">
                   <option value="All">All Status</option>
                   <option value="Completed">Completed</option>
@@ -409,7 +418,7 @@ export default function SalesPage() {
 
               {/* Payment */}
               <div className="relative">
-                <select value={paymentFilter} onChange={e => setPayment(e.target.value)}
+                <select value={paymentFilter} onChange={e => { setPayment(e.target.value); setPage(1); }}
                   className="appearance-none pl-3 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 transition-all font-medium text-gray-600 cursor-pointer">
                   <option value="All">All Payments</option>
                   <option value="Cash">Cash</option>
@@ -421,7 +430,7 @@ export default function SalesPage() {
 
               {/* Clear filters */}
               {hasActiveFilters && (
-                <button onClick={() => { setSearch(''); setStatus('All'); setPayment('All'); }}
+                <button onClick={() => { setSearch(''); setStatus('All'); setPayment('All'); setPage(1); }}
                   className="flex items-center gap-1.5 text-xs font-semibold text-red-500 hover:text-red-700 transition-colors px-2 py-1">
                   <X size={12} /> Clear filters
                 </button>
@@ -565,6 +574,17 @@ export default function SalesPage() {
               </div>
             </div>
           </>
+        )}
+
+        {/* ── Pagination ── */}
+        {pagination && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={pagination.total}
+            onPageChange={setPage}
+            onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
+          />
         )}
 
         {/* ── Footer ── */}
