@@ -10,6 +10,7 @@ import { inventoryService } from '../../services';
 import { customersService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
 import { ItemIcon } from '../../utils/inventoryIcons';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 
@@ -33,11 +34,13 @@ function CartItem({ item, onUpdateQty, onRemove }) {
       {/* Qty stepper */}
       <div className="flex items-center gap-1 flex-shrink-0">
         <button onClick={() => onUpdateQty(item.id, item.qty - 1)}
+          aria-label="Decrease quantity"
           className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 active:scale-90 transition-all">
           <Minus size={10} />
         </button>
         <span className="text-xs font-bold w-6 text-center tabular-nums">{item.qty}</span>
         <button onClick={() => onUpdateQty(item.id, item.qty + 1)}
+          aria-label="Increase quantity"
           className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 active:scale-90 transition-all">
           <Plus size={10} />
         </button>
@@ -46,6 +49,7 @@ function CartItem({ item, onUpdateQty, onRemove }) {
         {naira(item.sellingPrice * item.qty)}
       </p>
       <button onClick={() => onRemove(item.id)}
+        aria-label="Remove item"
         className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0">
         <Trash2 size={13} />
       </button>
@@ -233,11 +237,21 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
     onClose();
   };
 
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
   // Early return AFTER all hooks have been called.
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-sale-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       {/* Modal panel */}
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-2xl shadow-2xl flex flex-col rounded-t-2xl"
         style={{ maxHeight: '95vh' }}>
@@ -254,7 +268,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
               <ShoppingCart size={17} className="text-green-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900">
+              <h2 id="new-sale-modal-title" className="text-sm font-bold text-gray-900">
                 New Sale
               </h2>
               <p className="text-[11px] text-gray-400">
@@ -263,6 +277,7 @@ export default function NewSaleModal({ isOpen, onClose, onSave }) {
             </div>
           </div>
           <button onClick={handleClose}
+            aria-label="Close"
             className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>

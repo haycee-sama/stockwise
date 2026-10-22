@@ -130,10 +130,12 @@ function VendorCard({ vendor, onView, onEdit, onDelete, onPlaceOrder }) {
           <Eye size={12} /> View
         </button>
         <button onClick={() => onEdit(vendor)}
+          aria-label="Edit"
           className="w-8 flex items-center justify-center py-2 text-gray-400 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all">
           <Edit2 size={12} />
         </button>
         <button onClick={() => onDelete(vendor)}
+          aria-label="Delete"
           className="w-8 flex items-center justify-center py-2 text-gray-400 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
           <Trash2 size={12} />
         </button>
@@ -330,7 +332,7 @@ export default function VendorsPage() {
                 placeholder="Search vendor, items, location..."
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
+                <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
               )}
             </div>
             <button onClick={() => setShowFilters(v => !v)}

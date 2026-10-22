@@ -1,6 +1,7 @@
 // src/components/vendors/PlaceOrderModal.jsx
 import { useState } from 'react';
 import { X, ShoppingCart, Loader2, Plus, Minus, Trash2, Package } from 'lucide-react';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 
@@ -15,6 +16,9 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
   const [note, setNote]             = useState('');
   const [errors, setErrors]         = useState({});
   const [saving, setSaving]         = useState(false);
+
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
 
   if (!isOpen || !vendor) return null;
 
@@ -75,7 +79,14 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="place-order-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col">
 
         {/* Header */}
@@ -85,7 +96,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
               <ShoppingCart size={17} className="text-green-600" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900">
+              <h2 id="place-order-modal-title" className="text-base font-bold text-gray-900">
                 Place Order
               </h2>
               <p className="text-xs text-gray-400">
@@ -94,7 +105,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>
         </div>
@@ -151,11 +162,13 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
                     {/* Qty stepper */}
                     <div className="col-span-2 flex items-center justify-center gap-1">
                       <button type="button" onClick={() => updateRow(i, 'qty', Math.max(1, row.qty - 1))}
+                        aria-label="Decrease quantity"
                         className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-all">
                         <Minus size={9} />
                       </button>
                       <span className="text-xs font-bold w-5 text-center">{row.qty}</span>
                       <button type="button" onClick={() => updateRow(i, 'qty', row.qty + 1)}
+                        aria-label="Increase quantity"
                         className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-all">
                         <Plus size={9} />
                       </button>

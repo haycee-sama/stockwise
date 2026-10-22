@@ -364,6 +364,7 @@ export default function SalesPage() {
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
                 <button onClick={() => setSearch('')}
+                  aria-label="Clear search"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                   <X size={14} />
                 </button>
@@ -475,7 +476,7 @@ export default function SalesPage() {
                   <thead className="bg-gray-50/80 border-b border-gray-100">
                     <tr>
                       {['Order ID', 'Customer', 'Items', 'Total', 'Payment', 'Date', 'Status', 'Actions'].map(h => (
-                        <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3 whitespace-nowrap">
+                        <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3 whitespace-nowrap">
                           {h}
                         </th>
                       ))}
@@ -545,11 +546,13 @@ export default function SalesPage() {
                           <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openView(order)}
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"
+                              aria-label="View order"
                               title="View order">
                               <Eye size={13} />
                             </button>
                             <button
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-100 text-gray-400 transition-all"
+                              aria-label="Print receipt"
                               title="Print receipt">
                               <Printer size={13} />
                             </button>

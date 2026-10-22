@@ -1,6 +1,7 @@
 // src/components/expenses/ExpenseDeleteModal.jsx
 import { Trash2, Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench } from 'lucide-react';
 import { expenseCategories } from '../../data/mockData';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 // P2-007 fix: the mock expense categories have a lowercase `icon`
 // field (Lucide name string), NOT an `emoji` field. Map the string to
@@ -9,18 +10,28 @@ import { expenseCategories } from '../../data/mockData';
 const iconMap = { Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench };
 
 export default function ExpenseDeleteModal({ isOpen, expense, onClose, onConfirm }) {
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
   if (!isOpen || !expense) return null;
 
   const cat = expenseCategories.find(c => c.id === expense.category);
   const CatIcon = cat ? (iconMap[cat.icon] ?? Wrench) : Wrench;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="expense-delete-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Trash2 size={26} className="text-red-500" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">
+        <h3 id="expense-delete-modal-title" className="text-lg font-bold text-gray-900 text-center mb-2">
           Delete Expense?
         </h3>
         <p className="text-sm text-gray-500 text-center mb-4 leading-relaxed">

@@ -4,6 +4,7 @@ import {
   Edit2, CheckCircle, Clock, XCircle, TrendingUp,
   User, MessageSquare,
 } from 'lucide-react';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 const fmtDate = (iso) => iso
@@ -34,6 +35,11 @@ function OrderStatusBadge({ status }) {
 }
 
 export default function CustomerDrawer({ customer, onClose, onEdit }) {
+  // Drawer accessibility: Escape-to-close. (Backdrop has its own
+  // onClick={onClose}; panel stops click-propagation so clicks inside
+  // the drawer do not bubble up to the backdrop and dismiss it.)
+  const { onKeyDown } = useModalBehavior(!!customer, onClose);
+
   if (!customer) return null;
 
   const avgOrder = customer.totalOrders > 0
@@ -46,11 +52,18 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
     <>
       <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-sm bg-white shadow-2xl flex flex-col animate-slide-right">
+      <div
+        className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-sm bg-white shadow-2xl flex flex-col animate-slide-right"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="customer-drawer-title"
+        onKeyDown={onKeyDown}
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-sm font-bold text-gray-900">
+          <h2 id="customer-drawer-title" className="text-sm font-bold text-gray-900">
             Customer Profile
           </h2>
           <div className="flex items-center gap-2">
@@ -59,6 +72,7 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
               <Edit2 size={12} /> Edit
             </button>
             <button onClick={onClose}
+              aria-label="Close"
               className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
               <X size={17} />
             </button>

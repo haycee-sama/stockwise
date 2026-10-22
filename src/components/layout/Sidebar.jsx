@@ -71,7 +71,8 @@ export default function Sidebar() {
         )}
         <button
           onClick={() => setCollapsed(c => !c)}
-          className={`text-white/30 hover:text-white/70 transition-colors hidden lg:flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/5 ${collapsed ? 'mt-0 mx-auto' : ''}`}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className={`text-gray-400 hover:text-white/70 transition-colors hidden lg:flex items-center justify-center w-7 h-7 rounded-lg hover:bg-white/5 ${collapsed ? 'mt-0 mx-auto' : ''}`}
         >
           {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
         </button>
@@ -82,7 +83,7 @@ export default function Sidebar() {
         {navSections.map(section => (
           <div key={section.label}>
             {!collapsed && (
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/25 px-3 mb-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 px-3 mb-2">
                 {section.label}
               </p>
             )}
@@ -154,14 +155,15 @@ export default function Sidebar() {
               <p className="text-white text-xs font-semibold truncate">
                 {user?.firstName} {user?.lastName}
               </p>
-              <p className="text-white/40 text-[10px] truncate">
+              <p className="text-gray-400 text-[10px] truncate">
                 {user?.businessName ?? 'My Business'}
               </p>
             </div>
           )}
           {!collapsed && (
             <button onClick={handleLogout}
-              className="text-white/30 hover:text-red-400 transition-colors ml-auto"
+              aria-label="Sign out"
+              className="text-gray-400 hover:text-red-400 transition-colors ml-auto"
               title="Sign out">
               <LogOut size={15} />
             </button>

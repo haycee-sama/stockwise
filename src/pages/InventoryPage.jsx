@@ -89,6 +89,7 @@ function ItemCard({ item, onEdit, onDelete, selected, onSelect }) {
       <div className="flex items-start gap-3">
         {/* Checkbox */}
         <button onClick={() => onSelect(item.id)}
+          aria-label="Select item"
           className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all
             ${selected ? 'bg-green-600 border-green-600' : 'border-gray-300'}`}>
           {selected && <CheckCircle size={12} className="text-white" />}
@@ -134,10 +135,12 @@ function ItemCard({ item, onEdit, onDelete, selected, onSelect }) {
             </div>
             <div className="flex items-center gap-1.5">
               <button onClick={() => onEdit(item)}
+                aria-label="Edit"
                 className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all">
                 <Edit2 size={13} />
               </button>
               <button onClick={() => onDelete(item)}
+                aria-label="Delete"
                 className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all">
                 <Trash2 size={13} />
               </button>
@@ -153,11 +156,11 @@ function ItemCard({ item, onEdit, onDelete, selected, onSelect }) {
 function SortTh({ col, label, sortBy, onSort }) {
   const active = sortBy === col;
   return (
-    <th onClick={() => onSort(col)}
-      className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3 cursor-pointer select-none hover:text-gray-600 transition-colors whitespace-nowrap">
+    <th scope="col" onClick={() => onSort(col)}
+      className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 px-4 py-3 cursor-pointer select-none hover:text-gray-600 transition-colors whitespace-nowrap">
       <span className="flex items-center gap-1">
         {label}
-        <ArrowUpDown size={10} className={active ? 'text-green-500' : 'text-gray-300'} />
+        <ArrowUpDown size={10} className={active ? 'text-green-500' : 'text-gray-500'} />
       </span>
     </th>
   );
@@ -399,6 +402,7 @@ export default function InventoryPage() {
               className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
             {search && (
               <button onClick={() => setSearch('')}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                 <X size={14} />
               </button>
@@ -445,11 +449,13 @@ export default function InventoryPage() {
             </span>
             <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               <button onClick={() => setViewMode('table')}
+                aria-label="Table view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'table' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <LayoutList size={14} />
               </button>
               <button onClick={() => setViewMode('cards')}
+                aria-label="Card view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'cards' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <LayoutGrid size={14} />
@@ -503,8 +509,9 @@ export default function InventoryPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
                   <tr>
                     {/* Select all */}
-                    <th className="px-4 py-3 w-10">
+                    <th scope="col" className="px-4 py-3 w-10">
                       <button onClick={toggleSelectAll}
+                        aria-label="Select all"
                         className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all
                           ${selected.size === filtered.length && filtered.length > 0
                             ? 'bg-green-600 border-green-600'
@@ -520,9 +527,9 @@ export default function InventoryPage() {
                     <SortTh col="stock"        label="Stock"         sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="costPrice"    label="Cost"          sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="sellingPrice" label="Selling"       sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Margin</th>
-                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Status</th>
-                    <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Actions</th>
+                    <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Margin</th>
+                    <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Status</th>
+                    <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -538,6 +545,7 @@ export default function InventoryPage() {
                         {/* Checkbox */}
                         <td className="px-4 py-3.5">
                           <button onClick={() => toggleSelect(item.id)}
+                            aria-label="Select item"
                             className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-all
                               ${isSelected ? 'bg-green-600 border-green-600' : 'border-gray-300 hover:border-green-400'}`}>
                             {isSelected && <CheckCircle size={10} className="text-white" />}
@@ -620,11 +628,13 @@ export default function InventoryPage() {
                           <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openEdit(item)}
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"
+                              aria-label="Edit item"
                               title="Edit item">
                               <Edit2 size={12} />
                             </button>
                             <button onClick={() => openDel(item)}
                               className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all"
+                              aria-label="Delete item"
                               title="Delete item">
                               <Trash2 size={12} />
                             </button>
