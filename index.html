@@ -2,13 +2,59 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- ADD THIS LINE below ↓ -->
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+    <!-- Primary metadata -->
+    <title>Stockwise — Inventory and Sales Management for Nigerian SMEs</title>
+    <meta name="description" content="Stockwise is an inventory and sales management web application for Nigerian small and medium retail businesses. Track stock levels, record sales, manage customers and vendors, log expenses, and view business reports." />
+    <meta name="application-name" content="Stockwise" />
+    <meta name="author" content="Stockwise" />
+    <meta name="theme-color" content="#16a34a" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f7a49" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light" />
 
-    <title>Stockwise</title>
+    <!--
+      Robots: the app is an authenticated SPA. The only indexable routes
+      are the public auth screens (login, signup, forgot-password,
+      reset-password). Internal pages contain no useful indexable
+      content because they require authentication. We allow indexing
+      of the entry URL so the brand is discoverable, but block
+      following of links (every link goes to an auth-walled route).
+    -->
+    <meta name="robots" content="index, nofollow" />
+
+    <!-- Icons and manifest -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Open Graph (link-preview metadata for social sharing) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Stockwise" />
+    <meta property="og:title" content="Stockwise — Inventory and Sales Management for Nigerian SMEs" />
+    <meta property="og:description" content="Track stock levels, record sales, manage customers and vendors, log expenses, and view business reports. Built for Nigerian small and medium retail businesses." />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta property="og:image:alt" content="Stockwise brand mark — green rounded square with a white package icon." />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+
+    <!-- Twitter / X card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Stockwise — Inventory and Sales Management for Nigerian SMEs" />
+    <meta name="twitter:description" content="Track stock levels, record sales, manage customers and vendors, log expenses, and view business reports. Built for Nigerian small and medium retail businesses." />
+    <meta name="twitter:image" content="/icon-512.png" />
+    <meta name="twitter:image:alt" content="Stockwise brand mark — green rounded square with a white package icon." />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="root"></div>
