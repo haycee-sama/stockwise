@@ -3,6 +3,7 @@ import { ArrowRight, AlertTriangle, ShoppingCart, Package } from 'lucide-react';
 import { dashboardService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
 import { useState, useEffect } from 'react';
+import { LoadingState, ErrorState } from '../common/ResourceState';
 
 export default function LowStockTable() {
   const { activeBusinessId } = useBusiness();

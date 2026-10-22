@@ -48,10 +48,7 @@ export default function RevenueChart() {
     return () => { active = false; };
   }, [activeBusinessId]);
 
-  const total     = data.reduce((s, d) => s + d.thisWeek, 0);
-  const lastTotal = data.reduce((s, d) => s + d.lastWeek, 0);
-  const growth    = (((total - lastTotal) / lastTotal) * 100).toFixed(1);
-
+  // Guard: don't compute derived values until data is loaded
   if (loading) return <LoadingState label="Loading revenue…" />;
   if (error) return <ErrorState error={error} />;
   if (!data || data.length === 0) return (
@@ -60,6 +57,10 @@ export default function RevenueChart() {
       <p className="text-xs text-gray-400 mt-4">No revenue data yet.</p>
     </div>
   );
+
+  const total     = data.reduce((s, d) => s + d.thisWeek, 0);
+  const lastTotal = data.reduce((s, d) => s + d.lastWeek, 0);
+  const growth    = lastTotal > 0 ? (((total - lastTotal) / lastTotal) * 100).toFixed(1) : '0';
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-200">
       {/* Header */}

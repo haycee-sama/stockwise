@@ -40,7 +40,7 @@ export default function StockDonut() {
   }, [activeBusinessId]);
 
   const total = (stockData ?? []).reduce((s, d) => s + d.value, 0);
-  const inStockPct = Math.round(((stockData ?? [])[0]?.value ?? 0 / total) * 100);
+  const inStockPct = total > 0 ? Math.round(((stockData ?? [])[0]?.value ?? 0) / total * 100) : 0;
 
   if (loading) return <LoadingState label="Loading stock status…" />;
   if (error) return <ErrorState error={error} />;
