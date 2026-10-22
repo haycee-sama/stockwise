@@ -98,6 +98,22 @@ export async function get(id) {
     .order('order_date', { ascending: false })
     .limit(10);
 
+  // Fetch line-item counts per PO in one batched query so the
+  // VendorDrawer can show "N items" for each order instead of the
+  // previous hardcoded "0 items". Uses PostgREST on
+  // sw_purchase_order_items — no backend change required.
+  const poIds = (pos ?? []).map(p => p.id);
+  let itemCountByPo = {};
+  if (poIds.length > 0) {
+    const { data: poItems } = await supabase
+      .from('sw_purchase_order_items')
+      .select('purchase_order_id, qty')
+      .in('purchase_order_id', poIds);
+    for (const it of (poItems ?? [])) {
+      itemCountByPo[it.purchase_order_id] = (itemCountByPo[it.purchase_order_id] ?? 0) + 1;
+    }
+  }
+
   const stats = {
     totalOrders: pos?.length ?? 0,
     totalPaid: (pos ?? []).filter(p => p.status === 'delivered').reduce((s, p) => s + Number(p.total), 0),
@@ -106,7 +122,7 @@ export async function get(id) {
     orders: (pos ?? []).map(p => ({
       id: p.display_id ?? p.id,
       date: p.order_date,
-      items: 0, // would need a join to sw_purchase_order_items
+      items: itemCountByPo[p.id] ?? 0,
       total: Number(p.total),
       status: p.status,
     })),
