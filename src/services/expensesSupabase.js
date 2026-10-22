@@ -50,6 +50,7 @@ export async function get(id) {
     .from('sw_expenses')
     .select('*')
     .eq('id', id)
+    .is('deleted_at', null)
     .maybeSingle();
   if (error) return { data: null, error: { code: error.code, message: error.message } };
   if (!row) return { data: null, error: { code: 'NOT_FOUND', message: 'Expense not found' } };
