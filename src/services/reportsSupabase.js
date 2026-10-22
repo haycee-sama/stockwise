@@ -7,10 +7,17 @@ import { supabase } from '../lib/supabase';
 
 export async function salesReport() {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
-  // Aggregate sales by month for the last 6 months.
+  // Aggregate COMPLETED sales by month for the last 6 months.
+  //
+  // We filter to status='completed' at the query level so that
+  // `revenue` (sum of totals) and `orders` (count of rows) are
+  // consistent. The previous implementation summed revenue across
+  // ALL sales (including pending + cancelled) while only counting
+  // completed orders — which inflated `avgOrder = revenue / orders`.
   const { data: sales, error } = await supabase
     .from('sw_sales')
     .select('sale_date, total, status')
+    .eq('status', 'completed')
     .is('deleted_at', null)
     .order('sale_date', { ascending: true });
   if (error) return { data: null, error: { code: error.code, message: error.message } };
@@ -21,7 +28,7 @@ export async function salesReport() {
     const key = d.toLocaleDateString('en-US', { month: 'short' });
     if (!byMonth[key]) byMonth[key] = { month: key, revenue: 0, profit: 0, orders: 0 };
     byMonth[key].revenue += Number(s.total);
-    if (s.status === 'completed') byMonth[key].orders += 1;
+    byMonth[key].orders += 1;
   }
   const trend = Object.values(byMonth).slice(-6);
 

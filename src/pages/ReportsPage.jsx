@@ -403,10 +403,25 @@ function InventoryReport({ reports = {} }) {
 
 // ── Customer Report ───────────────────────────────
 function CustomerReport({ reports = {} }) {
-  const topCustomers = [...fallbackCustomers].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
-  const totalRevenue = fallbackCustomers.reduce((s, c) => s + c.totalSpent, 0);
-  const avgLTV       = Math.round(totalRevenue / fallbackCustomers.length);
-  const retention    = Math.round((fallbackCustomers.filter(c => c.totalOrders > 1).length / fallbackCustomers.length) * 100);
+  // Use the service response for the top-customers table + the
+  // derived KPIs. In Supabase mode this returns the user's real
+  // customers (with totalSpent=0/totalOrders=0 because the service
+  // does not join sw_sales today — see docs/BACKEND_HANDOVER.md §9.3).
+  // In demo mode the mock service returns mock customers with real
+  // mock values. The static `fallbackCustomers` import is only the
+  // last-resort fallback when the service field is null/undefined
+  // (not when it returns an empty array — `??` doesn't trigger on
+  // `[]`, so an honest empty result stays empty).
+  const serviceTop = reports.customers?.topCustomers ?? [];
+  const hasRealData = serviceTop.length > 0;
+  const topCustomers = hasRealData
+    ? serviceTop
+    : (reports.customers ? [] : fallbackCustomers);
+  const totalRevenue = topCustomers.reduce((s, c) => s + (c.totalSpent ?? 0), 0);
+  const avgLTV       = topCustomers.length > 0 ? Math.round(totalRevenue / topCustomers.length) : 0;
+  const retention    = topCustomers.length > 0
+    ? Math.round((topCustomers.filter(c => (c.totalOrders ?? 0) > 1).length / topCustomers.length) * 100)
+    : 0;
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -466,29 +481,39 @@ function CustomerReport({ reports = {} }) {
               ))}
             </tr></thead>
             <tbody>
+              {topCustomers.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center">
+                    <p className="text-sm text-gray-500 font-medium">No customers yet</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Add customers on the Customers page to see them here.
+                    </p>
+                  </td>
+                </tr>
+              )}
               {topCustomers.map((c, i) => (
-                <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+                <tr key={c.id ?? i} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
                   <td className="px-4 py-3"><span className="text-xs font-bold text-gray-500">{i+1}</span></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-                        style={{ background: c.color, color: c.textColor }}>{c.initials}</div>
+                        style={{ background: c.color ?? '#dcfce7', color: c.textColor ?? '#15803d' }}>{c.initials ?? '?'}</div>
                       <div>
-                        <p className="text-xs font-bold text-gray-800">{c.firstName} {c.lastName}</p>
-                        <p className="text-[10px] text-gray-400 truncate max-w-[120px]">{c.email}</p>
+                        <p className="text-xs font-bold text-gray-800">{c.firstName ?? c.name ?? 'Unknown'} {c.lastName ?? ''}</p>
+                        <p className="text-[10px] text-gray-400 truncate max-w-[120px]">{c.email ?? ''}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3"><span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">{c.type}</span></td>
-                  <td className="px-4 py-3"><span className="text-sm font-bold text-gray-700">{c.totalOrders}</span></td>
-                  <td className="px-4 py-3"><span className="text-sm font-extrabold text-green-600 tabular-nums">{naira(c.totalSpent)}</span></td>
+                  <td className="px-4 py-3"><span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">{c.type ?? '—'}</span></td>
+                  <td className="px-4 py-3"><span className="text-sm font-bold text-gray-700">{c.totalOrders ?? 0}</span></td>
+                  <td className="px-4 py-3"><span className="text-sm font-extrabold text-green-600 tabular-nums">{naira(c.totalSpent ?? 0)}</span></td>
                   <td className="px-4 py-3">
                     <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg capitalize
                       ${c.status === 'active' ? 'bg-green-100 text-green-700'
                       : c.status === 'new'    ? 'bg-blue-100  text-blue-700'
                       : c.status === 'owing'  ? 'bg-amber-100 text-amber-700'
                       :                        'bg-gray-100  text-gray-500'}`}>
-                      {c.status}
+                      {c.status ?? '—'}
                     </span>
                   </td>
                 </tr>

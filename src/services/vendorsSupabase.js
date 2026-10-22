@@ -84,6 +84,7 @@ export async function get(id) {
     .from('sw_vendors')
     .select('*')
     .eq('id', id)
+    .is('deleted_at', null)
     .maybeSingle();
   if (error) return { data: null, error: { code: error.code, message: error.message } };
   if (!row) return { data: null, error: { code: 'NOT_FOUND', message: 'Vendor not found' } };

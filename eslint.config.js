@@ -36,4 +36,27 @@ export default defineConfig([
       }],
     },
   },
+  {
+    // Test files legitimately use Node APIs (node:fs, node:url,
+    // node:path) for filesystem checks + the test runner's
+    // assertions API (describe/it/expect come from Vitest's
+    // globals=true). Give them Node + Vitest globals in addition
+    // to the browser globals inherited from the block above.
+    files: ['**/*.test.{js,jsx}', 'src/test/**/*.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+      },
+    },
+  },
 ])

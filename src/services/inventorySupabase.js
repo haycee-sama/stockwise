@@ -128,6 +128,7 @@ export async function get(id) {
     .from('sw_inventory_items')
     .select('*')
     .eq('id', id)
+    .is('deleted_at', null)
     .maybeSingle();
   if (error) return { data: null, error: { code: error.code, message: error.message } };
   if (!row) return { data: null, error: { code: 'NOT_FOUND', message: 'Item not found' } };

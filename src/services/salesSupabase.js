@@ -98,17 +98,21 @@ export async function list({ search = '', status = 'All', payment = 'All', page 
 
 export async function get(id) {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
-  // Try by UUID first, then by display_id.
+  // Try by UUID first, then by display_id. Both queries exclude
+  // soft-deleted sales — a deleted sale should return NOT_FOUND
+  // rather than its (now-stale) row data.
   let { data: row, error } = await supabase
     .from('sw_sales')
     .select('*')
     .eq('id', id)
+    .is('deleted_at', null)
     .maybeSingle();
   if (!row) {
     const r2 = await supabase
       .from('sw_sales')
       .select('*')
       .eq('display_id', id)
+      .is('deleted_at', null)
       .maybeSingle();
     row = r2.data;
     error = r2.error;

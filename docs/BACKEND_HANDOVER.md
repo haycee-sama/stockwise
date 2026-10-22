@@ -428,9 +428,9 @@ enforced server-side.
 
 | Function | Frontend call | Notes | Verification |
 | --- | --- | --- | --- |
-| `salesReport()` | aggregates over `sw_sales` only | `topProducts` and `paymentBreakdown` returned as `[]` (the function does NOT join `sw_sale_items`, so it cannot compute per-product or per-payment aggregates today). | mock-tested; **frontend-side gap** |
+| `salesReport()` | aggregates over `sw_sales` only (filtered to `status='completed'`) | `topProducts` and `paymentBreakdown` returned as `[]` (the function does NOT join `sw_sale_items`, so it cannot compute per-product or per-payment aggregates today). Revenue + orders are consistent — both count completed sales only. | mock-tested; **frontend-side gap** |
 | `inventoryReport()` | aggregates over `sw_inventory_items` | `categoryReport` and `lowStock` are computed; `topProducts` returned as `[]`. | mock-tested |
-| `customersReport()` | aggregates over `sw_customers` only | `acquisition` returned as `[]`; `topCustomers` returned with `totalSpent: 0, totalOrders: 0` (the function does NOT join `sw_sales`, so it cannot compute customer spend or order counts today). | mock-tested; **frontend-side gap** |
+| `customersReport()` | aggregates over `sw_customers` only | `acquisition` returned as `[]`; `topCustomers` returned with `totalSpent: 0, totalOrders: 0` (the function does NOT join `sw_sales`, so it cannot compute customer spend or order counts today). The Reports page renders the real `topCustomers` array (NOT mock data) — in Supabase mode with no customers, the table shows an honest "No customers yet" empty state. | mock-tested; **frontend-side gap** |
 | `expensesReport()` | aggregates over `sw_expenses` | Computed. | mock-tested |
 
 The Reports page (`src/pages/ReportsPage.jsx`) behaviour for the
@@ -673,11 +673,14 @@ misconfigured because of these.
   arrays `[]`), and the Supabase service returns literal `[]` for
   these fields, the page renders **empty tables/charts in Supabase
   mode** — it does NOT silently substitute mock data for these
-  three. The exception is `topCustomers`: the page always uses mock
-  data (`fallbackCustomers`) for the top-customers table regardless
-  of the service response — it never reads
-  `reports.customers?.topCustomers`. This is an honest gap in the
-  Reports page, NOT a silent substitution.
+  three. The `topCustomers` table also reads from the service
+  response (`reports.customers?.topCustomers`) — in Supabase mode
+  with no customers, the table shows an honest "No customers yet"
+  empty state. In demo mode the mock service returns mock customers
+  with real mock values. The static `fallbackCustomers` import is
+  only used when `reports.customers` is `null`/`undefined` (i.e.,
+  the service hasn't loaded yet) — once the service resolves (even
+  to an empty array), the page renders the real data.
 
 ### 9.4 Mock-data leakage
 
