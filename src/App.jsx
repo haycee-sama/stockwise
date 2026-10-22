@@ -49,14 +49,28 @@ function PageLoader() {
 function AppLayout() {
   return (
     <div className="flex min-h-screen">
+      {/* Skip link — keyboard users can jump straight to the main
+          content of each page without tabbing through the sidebar. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:bg-white focus:text-gray-900 focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg focus:border focus:border-gray-200"
+      >
+        Skip to main content
+      </a>
+
       {/* Desktop sidebar */}
       <div className="desktop-sidebar">
         <Sidebar />
       </div>
 
       {/* Main content — wrapped in an error boundary so a crash in one
-          page does not blank out the whole app (P2-001 fix). */}
-      <div className="flex-1 overflow-x-hidden min-w-0">
+          page does not blank out the whole app (P2-001 fix).
+
+          The `id="main-content"` anchor is the target of the skip link
+          above. `tabIndex={-1}` lets the wrapper receive programmatic
+          focus from the skip link without affecting the keyboard tab
+          order. */}
+      <div id="main-content" tabIndex={-1} className="flex-1 overflow-x-hidden min-w-0 focus:outline-none">
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
             <Outlet />

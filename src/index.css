@@ -116,3 +116,27 @@ input, select, textarea { font-size: 16px; }
   .no-print { display: none !important; }
   body { background: white; color: black; }
 }
+
+/* ── Reduced motion ──────────────────────────
+   Honours the user's OS / browser preference to
+   minimise non-essential motion. None of the
+   animations above are load-bearing for function —
+   they are all entrance or loading effects. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Visible focus indicator ─────────────────
+   Stronger than the default outline so keyboard
+   users can see which element currently has focus.
+   Applies to every focusable element so we do not
+   rely on each component to opt in. */
+:focus-visible {
+  outline: 2px solid #16a34a;
+  outline-offset: 2px;
+}
