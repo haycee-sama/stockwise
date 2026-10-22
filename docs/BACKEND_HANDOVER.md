@@ -292,11 +292,21 @@ backend developer should confirm these names match their backend.
 
 | Function | Frontend call | Payload | Expected response | Verification |
 | --- | --- | --- | --- | --- |
-| `list({ search, status, payment, page, pageSize })` | `supabase.from('sw_sales').select('*', { count: 'exact' }).is('deleted_at', null)` + filters | — | Array + pagination | mock-tested; supabase-tested (prior) |
-| `get(id)` | `supabase.from('sw_sales').select('*').eq('id', id).maybeSingle()` then fallback by `display_id` | UUID or display_id | shaped row | mock-tested |
+| `list({ search, status, payment, page, pageSize })` | `supabase.from('sw_sales').select('*, customer:customer_id(first_name, last_name)', { count: 'exact' }).is('deleted_at', null)` + filters | — | Array + pagination; each row's `customer.name` resolved via PostgREST embedding | mock-tested; supabase-tested (prior) |
+| `get(id)` | `supabase.from('sw_sales').select('*, customer:customer_id(first_name, last_name)').eq('id', id).is('deleted_at', null).maybeSingle()` then fallback by `display_id` (same embedding). Then `supabase.from('sw_sale_items').select('qty, unit_price, item_id, item:item_id(name, sku)').eq('sale_id', row.id)` | UUID or display_id | shaped row with customer name + line-item names | mock-tested |
 | `create({ businessId, customerId?, payment, status, note, items: [{ itemId, qty, unitPrice }] })` | `supabase.rpc('sw_create_sale', { p_payload: rpcPayload })` then `get(sale_id)` | RPC payload | `{ sale_id, display_id, total }` | mock-tested; supabase-tested (prior) |
 | `update(id, patch)` | `supabase.from('sw_sales').update(dbPatch).eq('id', id).select().maybeSingle()` | UUID + patch | shaped row | mock-tested |
 | `listPaymentMethods()` | hardcoded `['Cash', 'Transfer', 'Card']` | — | array | mock-tested |
+
+The frontend's shaped row for a sale resolves customer + item names
+via PostgREST resource embedding:
+- `customer.name` → 'Walk-in' when `customer_id` is null.
+- `customer.name` → real customer name when `customer_id` is non-null.
+- `items[i].name` → real inventory item name when the FK resolves.
+- `items[i].name` → 'Unavailable item' when the inventory item has
+  been soft-deleted AND the FK relationship filters it out.
+
+No mock data is fabricated — missing relationships render honestly.
 
 The RPC payload the frontend constructs for `sw_create_sale` is:
 
@@ -363,7 +373,7 @@ or remain frontend-only.
 | Function | Frontend call | Payload | Expected response | Verification |
 | --- | --- | --- | --- | --- |
 | `list({ search, category, status, page, pageSize })` | `supabase.from('sw_vendors').select('*', { count: 'exact' }).is('deleted_at', null)` + filters | — | Array + pagination | mock-tested |
-| `get(id)` | `supabase.from('sw_vendors').select('*').eq('id', id).maybeSingle()` then fetches 10 recent POs | UUID | shaped row with `orders[]` | mock-tested |
+| `get(id)` | `supabase.from('sw_vendors').select('*').eq('id', id).is('deleted_at', null).maybeSingle()` then fetches 10 recent POs + batch-fetches `sw_purchase_order_items` per PO to populate `orders[i].items` with real line-item counts | UUID | shaped row with `orders[]` (items count is real, not 0) | mock-tested |
 | `create({ businessId, name, contactPerson, email?, phone, category, location, status, leadTimeDays, rating, note? })` | `supabase.from('sw_vendors').insert({ … }).select().single()` | row | shaped row | mock-tested |
 | `update(id, patch)` | `supabase.from('sw_vendors').update(dbPatch).eq('id', id).select().maybeSingle()` | UUID + patch | shaped row | mock-tested |
 | `remove(id)` | soft delete | UUID | `{ id }` | mock-tested |
@@ -416,7 +426,7 @@ enforced server-side.
 
 | Function | Frontend call | Notes | Verification |
 | --- | --- | --- | --- |
-| `summary()` | counts on `sw_inventory_items` + `sw_sales` | Returns 13 fields. Five of them are NOT computed and returned as `0`: `totalProfit` (no cost-vs-selling aggregation), and the four period-over-period deltas (`salesChange`, `profitChange`, `inventoryChange`, `lowStockChange`). The dashboard's "vs last month" labels are therefore misleading in Supabase mode. | mock-tested; **frontend-side gap** |
+| `summary()` | counts on `sw_inventory_items` + `sw_sales`; also fetches `sw_sale_items` + embeds `item:item_id(cost_price)` to compute `totalProfit` | Returns 13 fields. `totalProfit` is now computed from (selling_price - cost_price) * qty per line item. `salesChange` + `profitChange` are computed from this-month vs last-month completed sales. `inventoryChange` + `lowStockChange` are approximated from `salesChange` (no historical inventory snapshot table on the backend — see §9.3). | mock-tested; **partially approximated** |
 | `revenue()` | groups by day-of-week for last 2 weeks on `sw_sales` | Returns `{ data: [{day, thisWeek, lastWeek}], total, lastTotal, growthPct }` | mock-tested |
 | `stockStatus()` | counts by derived status on `sw_inventory_items` | Returns counts for In Stock / Low Stock / Out of Stock | mock-tested |
 | `topSellersList({ limit })` | aggregates `sw_sale_items` by `item_id` | Returns top N items **sorted by revenue (descending)** — not by qty. The `sold` (qty) field is computed and returned but is not the sort key. | mock-tested |
@@ -428,9 +438,9 @@ enforced server-side.
 
 | Function | Frontend call | Notes | Verification |
 | --- | --- | --- | --- |
-| `salesReport()` | aggregates over `sw_sales` only (filtered to `status='completed'`) | `topProducts` and `paymentBreakdown` returned as `[]` (the function does NOT join `sw_sale_items`, so it cannot compute per-product or per-payment aggregates today). Revenue + orders are consistent — both count completed sales only. | mock-tested; **frontend-side gap** |
+| `salesReport()` | aggregates over `sw_sales` only (filtered to `status='completed'`); also fetches `sw_sale_items` + embeds `item:item_id(name, sku)` for topProducts | `topProducts` (top 5 by revenue), `paymentBreakdown` (grouped by payment method with pct), and `momGrowthPct` (from last two trend months) are all now computed. Previously all were `[]` or `0`. | mock-tested |
 | `inventoryReport()` | aggregates over `sw_inventory_items` | `categoryReport` and `lowStock` are computed; `topProducts` returned as `[]`. | mock-tested |
-| `customersReport()` | aggregates over `sw_customers` only | `acquisition` returned as `[]`; `topCustomers` returned with `totalSpent: 0, totalOrders: 0` (the function does NOT join `sw_sales`, so it cannot compute customer spend or order counts today). The Reports page renders the real `topCustomers` array (NOT mock data) — in Supabase mode with no customers, the table shows an honest "No customers yet" empty state. | mock-tested; **frontend-side gap** |
+| `customersReport()` | fetches `sw_customers` + `sw_sales` (completed) in parallel, joins in JS | `acquisition` (new customers per month, from `created_at`), `topCustomers` (top 5 by `totalSpent` — real, computed from completed sales per `customer_id`), and `typeBreakdown` are all now computed. Previously `topCustomers[i].totalSpent` was hardcoded 0. | mock-tested |
 | `expensesReport()` | aggregates over `sw_expenses` | Computed. | mock-tested |
 
 The Reports page (`src/pages/ReportsPage.jsx`) behaviour for the
@@ -638,49 +648,65 @@ These are gaps in the frontend's service layer — they are NOT caused by
 the backend. The backend developer should not assume the server is
 misconfigured because of these.
 
-- `dashboardSupabase.recentSalesList()` and `pendingOrdersList()` DO join
-  `sw_customers` (via `customer:customer_id(first_name, last_name)`) so
-  the dashboard shows the customer name on each pending order and
-  recent sale in Supabase mode. They do NOT join `sw_sale_items`, so
-  the dashboard shows "0 items" for each row (the `items` field is
-  `0`).
-- `dashboardSupabase.summary()` does not compute period-over-period
-  deltas (`salesChange`, `profitChange`, `inventoryChange`,
-  `lowStockChange` are 0). The dashboard's "vs last month" labels are
-  therefore misleading in Supabase mode.
-- `salesSupabase.list()` and `salesSupabase.get()` do not join
-  `sw_customers` or `sw_inventory_items`. The Sales page shows the
-  customer name as "Unknown" and line-item names as "Unknown item" in
-  Supabase mode.
-- `customersSupabase.list()` does not perform the per-customer sales
-  lookup that `get()` performs. In `list()` the shaped row's
-  `totalSpent`, `totalOrders`, `lastOrder`, and `orders` fields are
-  returned as `0`, `0`, `null`, and `[]` respectively (the list view
-  does not show per-customer aggregates — only the detail drawer does).
-  `get()` does compute these fields from up to 10 recent `sw_sales`
-  rows, but `orders[i].items` is `0` (no join to `sw_sale_items`).
-- `vendorsSupabase.get()` returns `orders[i].items = 0` (no join to
-  `sw_purchase_order_items`).
-- `reportsSupabase.salesReport()` returns `topProducts: []` and
-  `paymentBreakdown: []` (not computed).
-- `reportsSupabase.customersReport()` returns `acquisition: []` and
-  `topCustomers[i].totalSpent = 0, totalOrders = 0` (no join to
-  `sw_sales` to compute the aggregates).
+**Resolved in the latest frontend phase:**
+- `salesSupabase.list()` and `salesSupabase.get()` now join
+  `sw_customers` and `sw_inventory_items` via PostgREST resource
+  embedding (`customer:customer_id(first_name, last_name)` on
+  sw_sales; `item:item_id(name, sku)` on sw_sale_items). The Sales
+  page shows the real customer name and item name in Supabase mode.
+  Walk-in customers (customer_id is null) show "Walk-in" honestly.
+  Soft-deleted inventory items (FK filtered out) show "Unavailable
+  item" honestly.
+- `customersSupabase.list()` now batch-fetches completed sales per
+  customer in a single query and computes `totalSpent` + `totalOrders`.
+  The Customers list view shows real per-customer totals (previously
+  0). `get()` continues to also fetch up to 10 recent orders for
+  the detail drawer (with `orders[i].items = 0` — see below).
+- `vendorsSupabase.get()` now batch-fetches `sw_purchase_order_items`
+  per PO and populates `orders[i].items` with the real line-item count
+  (previously hardcoded 0).
+- `dashboardSupabase.summary()` now computes `totalProfit` from
+  `sw_sale_items` joined to `sw_inventory_items.cost_price` via
+  PostgREST resource embedding (`item:item_id(cost_price)`). The
+  four period-over-period deltas (`salesChange`, `profitChange`,
+  `inventoryChange`, `lowStockChange`) are now computed by comparing
+  this month's vs last month's completed sales. `inventoryChange` +
+  `lowStockChange` are approximated from `salesChange` (no historical
+  inventory snapshot table exists on the backend — the true delta
+  would require a periodic snapshot, which is a backend responsibility).
+- `reportsSupabase.salesReport()` now computes `topProducts` (by
+  revenue, from `sw_sale_items` joined to `sw_inventory_items` via
+  PostgREST), `paymentBreakdown` (grouped by payment method with pct),
+  and `momGrowthPct` (from the last two trend months). Previously all
+  were `[]` or `0`.
+- `reportsSupabase.customersReport()` now fetches `sw_customers` +
+  `sw_sales` in parallel and joins in JS to compute per-customer
+  `totalSpent` + `totalOrders`. `topCustomers` is sorted by totalSpent
+  desc (real, not hardcoded 0). `acquisition` trend groups customers
+  by `created_at` month.
+
+**Remaining gaps (still open):**
+- `dashboardSupabase.recentSalesList()` and `pendingOrdersList()` DO
+  join `sw_customers` (via `customer:customer_id(first_name, last_name)`)
+  so the dashboard shows the customer name on each pending order and
+  recent sale. They do NOT join `sw_sale_items`, so the dashboard shows
+  "0 items" for each row (the `items` field is `0`).
+- `dashboardSupabase.summary()` `inventoryChange` + `lowStockChange`
+  are approximated from `salesChange` — the true inventory-count
+  delta would require a periodic inventory snapshot table on the
+  backend (out of scope for a frontend-only fix).
+- `customersSupabase.get()` returns `orders[i].items = 0` (no join
+  to `sw_sale_items` for the per-customer recent-orders list in the
+  detail drawer).
 - **Reports page fallback behaviour** (`src/pages/ReportsPage.jsx`):
-  the page uses the `??` (nullish-coalescing) operator on the service
-  response for `topProducts`, `paymentBreakdown`, and `acquisition`.
-  Because `??` only triggers on `null`/`undefined` (NOT on empty
-  arrays `[]`), and the Supabase service returns literal `[]` for
-  these fields, the page renders **empty tables/charts in Supabase
-  mode** — it does NOT silently substitute mock data for these
-  three. The `topCustomers` table also reads from the service
-  response (`reports.customers?.topCustomers`) — in Supabase mode
-  with no customers, the table shows an honest "No customers yet"
-  empty state. In demo mode the mock service returns mock customers
-  with real mock values. The static `fallbackCustomers` import is
-  only used when `reports.customers` is `null`/`undefined` (i.e.,
-  the service hasn't loaded yet) — once the service resolves (even
-  to an empty array), the page renders the real data.
+  the page reads from the service response for `topProducts`,
+  `paymentBreakdown`, `acquisition`, and `topCustomers`. The
+  `topCustomers` table uses the real service response and shows an
+  honest "No customers yet" empty state when the list is empty. In
+  demo mode the mock service returns mock customers with real mock
+  values. The static `fallbackCustomers` import is only used when
+  `reports.customers` is `null`/`undefined` (i.e., the service hasn't
+  loaded yet).
 
 ### 9.4 Mock-data leakage
 
@@ -692,12 +718,16 @@ backend — they remain frontend-defined. The Reports page and the
 Expenses page also use mock arrays as chart fallbacks when the Supabase
 service returns `null` or an empty result.
 
-### 9.5 No pagination UI
+### 9.5 Pagination UI
 
-Service `list()` functions default to `pageSize: 100` and accept `page` +
-`pageSize` parameters, but no list view exposes a pagination control. If
-a business has more than 100 records in any list, only the first 100 are
-visible.
+All list pages (Sales, Customers, Inventory, Vendors, Expenses) now
+expose a reusable pagination control (`src/components/common/Pagination.jsx`)
+with Previous/Next buttons, a page indicator, a page-size selector
+(10/25/50/100 — default 25), and a "Showing X–Y of Z" count. The control
+resets to page 1 when any filter / search / sort changes to prevent
+out-of-range pages. The service `list()` functions consume the existing
+`page` + `pageSize` PostgREST `.range()` parameters — no backend change
+was required.
 
 ### 9.6 Hardcoded `alert()` calls
 
