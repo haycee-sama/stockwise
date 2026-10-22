@@ -1,8 +1,11 @@
 // src/components/inventory/ItemModal.jsx
 import { useState, useEffect } from 'react';
 import { X, Package, Loader2, CheckCircle } from 'lucide-react';
-import { categories, suppliers } from '../../data/mockData';
-import { iconOptions, iconMap } from '../../utils/inventoryIcons';
+import { categories } from '../../data/mockData';
+import { vendorsService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
+import { iconOptions, iconMap } from '../../utils/inventoryIconData';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 // ── Reusable Field wrapper ────────────────────────
 function Field({ label, required, error, children }) {
@@ -94,32 +97,31 @@ const bgOptions = [
 ];
 
 export default function ItemModal({ isOpen, onClose, onSave, editItem }) {
-  const [form, setForm]       = useState(emptyForm);
+  const { activeBusinessId } = useBusiness();
+  const [suppliers, setSuppliers] = useState([]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await vendorsService.list({ businessId: activeBusinessId ?? undefined });
+      if (active && data) setSuppliers(data.map(v => v.name));
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
+  // Lazy initialiser — derives from `editItem` if present.
+  // Combined with a `key` prop on the caller side, this replaces
+  // the previous effect-driven form sync (which fired `setState`
+  // inside `useEffect` and triggered cascading renders —
+  // react-hooks/set-state-in-effect).
+  const [form, setForm]       = useState(() => editItem
+    ? { name: editItem.name ?? '', sku: editItem.sku ?? '', category: editItem.category ?? '', supplier: editItem.supplier ?? '', stock: editItem.stock ?? '', threshold: editItem.threshold ?? '', costPrice: editItem.costPrice ?? '', sellingPrice: editItem.sellingPrice ?? '', iconName: editItem.iconName ?? 'Package', bg: editItem.bg ?? '#f0fdf4' }
+    : { ...emptyForm });
   const [errors, setErrors]   = useState({});
   const [saving, setSaving]   = useState(false);
   const [step, setStep]       = useState(1); // 2-step form
   const isEditing = !!editItem;
 
-  useEffect(() => {
-    if (editItem) {
-      setForm({
-        name:         editItem.name         ?? '',
-        sku:          editItem.sku          ?? '',
-        category:     editItem.category     ?? '',
-        supplier:     editItem.supplier     ?? '',
-        stock:        editItem.stock        ?? '',
-        threshold:    editItem.threshold    ?? '',
-        costPrice:    editItem.costPrice    ?? '',
-        sellingPrice: editItem.sellingPrice ?? '',
-        iconName:     editItem.iconName     ?? 'Package',
-        bg:           editItem.bg           ?? '#f0fdf4',
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setErrors({});
-    setStep(1);
-  }, [editItem, isOpen]);
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -180,7 +182,14 @@ export default function ItemModal({ isOpen, onClose, onSave, editItem }) {
   const SelectedIcon = iconMap[form.iconName] ?? Package;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="item-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg shadow-2xl max-h-[95vh] sm:max-h-[88vh] flex flex-col rounded-t-2xl animate-fade-up">
 
         {/* Header */}
@@ -190,7 +199,7 @@ export default function ItemModal({ isOpen, onClose, onSave, editItem }) {
               <Package size={17} className="text-green-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 id="item-modal-title" className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
                 {isEditing ? 'Edit Item' : 'Add New Item'}
               </h2>
               <p className="text-[11px] text-gray-400">
@@ -199,6 +208,7 @@ export default function ItemModal({ isOpen, onClose, onSave, editItem }) {
             </div>
           </div>
           <button onClick={onClose}
+            aria-label="Close"
             className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>

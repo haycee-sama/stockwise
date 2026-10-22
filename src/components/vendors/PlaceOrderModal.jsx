@@ -1,14 +1,24 @@
 // src/components/vendors/PlaceOrderModal.jsx
 import { useState } from 'react';
-import { X, ShoppingCart, Loader2, Plus, Minus, Trash2 } from 'lucide-react';
+import { X, ShoppingCart, Loader2, Plus, Minus, Trash2, Package } from 'lucide-react';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
+
+// Module-level counter for PO IDs. Avoids `Math.random` inside
+// the component body (react-hooks/purity rule) and is monotonic
+// so retrying the same order placement cannot collide with a
+// previous successful placement's ID within this session.
+let __poCounter = 100;
 
 export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
   const [orderItems, setOrderItems] = useState([{ name: '', qty: 1, unitPrice: '' }]);
   const [note, setNote]             = useState('');
   const [errors, setErrors]         = useState({});
   const [saving, setSaving]         = useState(false);
+
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
 
   if (!isOpen || !vendor) return null;
 
@@ -37,10 +47,24 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
     setSaving(true);
     await new Promise(r => setTimeout(r, 800));
 
+    // Build the validated line-items array once — used both for the
+    // `items` count (display) and the `lineItems` payload (Supabase
+    // insert). Without the array, the Supabase-backed placeOrder would
+    // receive `items: <number>` and crash on `.filter()` inside the
+    // service's line-item mapping step.
+    const validItems = orderItems
+      .filter(r => r.name.trim() && Number(r.qty) > 0 && Number(r.unitPrice) > 0)
+      .map(r => ({
+        name: r.name.trim(),
+        qty: Number(r.qty),
+        unitPrice: Number(r.unitPrice),
+      }));
+
     const newOrder = {
-      id:     `PO-${String(Math.floor(Math.random() * 900) + 100)}`,
+      id:     `PO-${String(__poCounter++)}`,
       date:   new Date().toISOString().slice(0, 10),
-      items:  orderItems.filter(r => r.name.trim()).length,
+      items:  validItems.length,
+      lineItems: validItems,
       total,
       status: 'pending',
       note,
@@ -55,7 +79,14 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="place-order-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col">
 
         {/* Header */}
@@ -65,7 +96,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
               <ShoppingCart size={17} className="text-green-600" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 id="place-order-modal-title" className="text-base font-bold text-gray-900">
                 Place Order
               </h2>
               <p className="text-xs text-gray-400">
@@ -74,7 +105,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>
         </div>
@@ -131,11 +162,13 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
                     {/* Qty stepper */}
                     <div className="col-span-2 flex items-center justify-center gap-1">
                       <button type="button" onClick={() => updateRow(i, 'qty', Math.max(1, row.qty - 1))}
+                        aria-label="Decrease quantity"
                         className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-all">
                         <Minus size={9} />
                       </button>
                       <span className="text-xs font-bold w-5 text-center">{row.qty}</span>
                       <button type="button" onClick={() => updateRow(i, 'qty', row.qty + 1)}
+                        aria-label="Increase quantity"
                         className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-all">
                         <Plus size={9} />
                       </button>
@@ -174,7 +207,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
           {/* Order Total */}
           <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-5 py-4">
             <span className="text-sm font-bold text-gray-700">Order Total</span>
-            <span className="text-xl font-extrabold text-green-600" style={{ fontFamily: 'sans-serif' }}>
+            <span className="text-xl font-extrabold text-green-600">
               {naira(total)}
             </span>
           </div>
@@ -201,7 +234,7 @@ export default function PlaceOrderModal({ isOpen, onClose, onSave, vendor }) {
               className="flex-[2] py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-bold transition-all flex items-center justify-center gap-2">
               {saving
                 ? <><Loader2 size={15} className="animate-spin" /> Placing Order...</>
-                : <>📦 Place Order · {naira(total)}</>
+                : <><Package size={15} /> Place Order · {naira(total)}</>
               }
             </button>
           </div>

@@ -4,6 +4,7 @@ import {
   Edit2, CheckCircle, Clock, XCircle, TrendingUp,
   User, MessageSquare,
 } from 'lucide-react';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 const fmtDate = (iso) => iso
@@ -34,6 +35,11 @@ function OrderStatusBadge({ status }) {
 }
 
 export default function CustomerDrawer({ customer, onClose, onEdit }) {
+  // Drawer accessibility: Escape-to-close. (Backdrop has its own
+  // onClick={onClose}; panel stops click-propagation so clicks inside
+  // the drawer do not bubble up to the backdrop and dismiss it.)
+  const { onKeyDown } = useModalBehavior(!!customer, onClose);
+
   if (!customer) return null;
 
   const avgOrder = customer.totalOrders > 0
@@ -46,11 +52,18 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
     <>
       <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-sm bg-white shadow-2xl flex flex-col animate-slide-right">
+      <div
+        className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-sm bg-white shadow-2xl flex flex-col animate-slide-right"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="customer-drawer-title"
+        onKeyDown={onKeyDown}
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+          <h2 id="customer-drawer-title" className="text-sm font-bold text-gray-900">
             Customer Profile
           </h2>
           <div className="flex items-center gap-2">
@@ -59,6 +72,7 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
               <Edit2 size={12} /> Edit
             </button>
             <button onClick={onClose}
+              aria-label="Close"
               className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
               <X size={17} />
             </button>
@@ -72,13 +86,12 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
           <div className="px-5 py-5 border-b border-gray-100">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-extrabold flex-shrink-0"
-                style={{ background: customer.color, color: customer.textColor, fontFamily: 'sans-serif' }}>
+                style={{ background: customer.color, color: customer.textColor }}>
                 {customer.initials}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h3 className="text-base font-extrabold text-gray-900 truncate"
-                    style={{ fontFamily: 'sans-serif' }}>
+                  <h3 className="text-base font-extrabold text-gray-900 truncate">
                     {customer.firstName} {customer.lastName}
                   </h3>
                   <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${sCfg.cls}`}>
@@ -120,8 +133,7 @@ export default function CustomerDrawer({ customer, onClose, onEdit }) {
               { label: 'Avg. Order',   value: naira(avgOrder),             color: 'text-purple-700', bg: 'bg-purple-50' },
             ].map(s => (
               <div key={s.label} className={`${s.bg} rounded-xl p-3 text-center`}>
-                <p className={`text-sm font-extrabold ${s.color} tabular-nums`}
-                  style={{ fontFamily: 'sans-serif' }}>{s.value}</p>
+                <p className={`text-sm font-extrabold ${s.color} tabular-nums`}>{s.value}</p>
                 <p className="text-[10px] text-gray-500 font-medium mt-0.5">{s.label}</p>
               </div>
             ))}

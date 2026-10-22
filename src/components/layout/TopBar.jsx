@@ -1,14 +1,9 @@
 // src/components/layout/TopBar.jsx
 import { useState } from 'react';
 import { Bell, Search, Menu, X, ChevronDown } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
-const notifications = [
-  { id: 1, title: 'Low Stock Alert',     body: 'Sun Hat is down to 3 units',       time: '5m ago',  unread: true,  color: 'bg-amber-500' },
-  { id: 2, title: 'New Sale Recorded',   body: 'Chidinma Eze — ₦23,500',           time: '32m ago', unread: true,  color: 'bg-green-500' },
-  { id: 3, title: 'Order Delivered',     body: 'PO-024 from Lagos Fashion Hub',     time: '2h ago',  unread: false, color: 'bg-blue-500'  },
-  { id: 4, title: 'Stock Alert',         body: 'Stiletto Heels — only 4 remaining', time: '4h ago',  unread: false, color: 'bg-amber-500' },
-];
+const notifications = []; // No persisted notification system yet
 
 export default function TopBar({ title, subtitle, actions }) {
   const { user } = useAuth();
@@ -38,21 +33,19 @@ export default function TopBar({ title, subtitle, actions }) {
           <div className="flex-1 min-w-0">
             {title ? (
               <>
-                <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate"
-                  style={{ fontFamily: 'sans-serif' }}>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
                   {title}
                 </h1>
                 {subtitle && (
-                  <p className="text-xs text-gray-400 truncate hidden sm:block">{subtitle}</p>
+                  <p className="text-xs text-gray-500 truncate hidden sm:block">{subtitle}</p>
                 )}
               </>
             ) : (
               <>
-                <h1 className="text-lg sm:text-xl font-bold text-gray-900"
-                  style={{ fontFamily: 'sans-serif' }}>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900">
                   {getGreeting()}, {user?.firstName}
                 </h1>
-                <p className="text-xs text-gray-400 hidden sm:block">{today}</p>
+                <p className="text-xs text-gray-500 hidden sm:block">{today}</p>
               </>
             )}
           </div>
@@ -65,13 +58,14 @@ export default function TopBar({ title, subtitle, actions }) {
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Search (coming soon)" disabled
                 className="pl-9 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all w-44 lg:w-56"
               />
             </div>
 
             {/* Mobile search toggle */}
             <button onClick={() => setShowSearch(s => !s)}
+              aria-label="Search"
               className="md:hidden w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-all">
               <Search size={16} />
             </button>
@@ -80,6 +74,7 @@ export default function TopBar({ title, subtitle, actions }) {
             <div className="relative">
               <button
                 onClick={() => setShowNotif(v => !v)}
+                aria-label="Notifications"
                 className="relative w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-all text-gray-500">
                 <Bell size={16} />
                 {unreadCount > 0 && (
@@ -95,8 +90,7 @@ export default function TopBar({ title, subtitle, actions }) {
                   <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
                   <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-up">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-bold text-gray-900"
-                        style={{ fontFamily: 'sans-serif' }}>
+                      <p className="text-sm font-bold text-gray-900">
                         Notifications
                       </p>
                       <span className="text-xs font-semibold text-green-600 cursor-pointer hover:underline">
@@ -137,6 +131,7 @@ export default function TopBar({ title, subtitle, actions }) {
             {/* Mobile: action menu toggle */}
             {actions && (
               <button onClick={() => setMobileMenu(v => !v)}
+                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
                 className="sm:hidden w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-all">
                 {mobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
               </button>
@@ -149,7 +144,7 @@ export default function TopBar({ title, subtitle, actions }) {
           <div className="md:hidden px-4 pb-3 animate-fade-up">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input autoFocus type="text" placeholder="Search anything..."
+              <input autoFocus type="text" placeholder="Search (coming soon)" disabled
                 className="w-full pl-9 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-green-400 transition-all" />
             </div>
           </div>

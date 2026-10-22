@@ -1,7 +1,8 @@
 // src/components/customers/CustomerModal.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Users, Loader2, CheckCircle, Phone, Mail, MapPin, Building2 } from 'lucide-react';
 import { customerTypes, avatarColors } from '../../data/mockData';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 function Field({ label, required, error, children }) {
   return (
@@ -44,27 +45,20 @@ const emptyForm = {
 };
 
 export default function CustomerModal({ isOpen, onClose, onSave, editCustomer }) {
-  const [form, setForm]     = useState(emptyForm);
+  // Lazy initialiser — derives the form state from `editCustomer`
+  // when present, otherwise uses `emptyForm`. Combined with a `key`
+  // prop on the caller side, this replaces the previous effect-driven
+  // sync (which fired `setState` inside `useEffect` and triggered
+  // cascading renders — react-hooks/set-state-in-effect).
+  const [form, setForm]     = useState(() => editCustomer
+    ? { firstName: editCustomer.firstName ?? '', lastName:  editCustomer.lastName  ?? '', email:     editCustomer.email     ?? '', phone:     editCustomer.phone     ?? '', type:      editCustomer.type      ?? '', location:  editCustomer.location  ?? '', note:      editCustomer.note      ?? '' }
+    : { ...emptyForm });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const isEditing = !!editCustomer;
 
-  useEffect(() => {
-    if (editCustomer) {
-      setForm({
-        firstName: editCustomer.firstName ?? '',
-        lastName:  editCustomer.lastName  ?? '',
-        email:     editCustomer.email     ?? '',
-        phone:     editCustomer.phone     ?? '',
-        type:      editCustomer.type      ?? '',
-        location:  editCustomer.location  ?? '',
-        note:      editCustomer.note      ?? '',
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setErrors({});
-  }, [editCustomer, isOpen]);
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -79,7 +73,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
     if (!form.firstName.trim()) e.firstName = 'First name is required';
     if (!form.lastName.trim())  e.lastName  = 'Last name is required';
     if (!form.phone.trim())     e.phone     = 'Phone number is required';
-    else if (!/^[0-9+\s\-]{7,15}$/.test(form.phone)) e.phone = 'Enter a valid phone number';
+    else if (!/^\+?\d[\d ]{6,14}$/.test(form.phone)) e.phone = 'Enter a valid phone number';
     if (form.email && !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email';
     if (!form.type)             e.type     = 'Please select a customer type';
     if (!form.location.trim())  e.location = 'Location is required';
@@ -115,7 +109,14 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
   const initials = `${form.firstName?.[0] ?? ''}${form.lastName?.[0] ?? ''}`.toUpperCase();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="customer-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg shadow-2xl rounded-t-2xl animate-fade-up"
         style={{ maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}>
 
@@ -131,7 +132,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
               <Users size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 id="customer-modal-title" className="text-sm font-bold text-gray-900">
                 {isEditing ? 'Edit Customer' : 'Add Customer'}
               </h2>
               <p className="text-[11px] text-gray-400">
@@ -139,7 +140,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>
         </div>
@@ -202,7 +203,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
             {(form.firstName || form.lastName) && (
               <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ background: editCustomer?.color ?? '#dcfce7', color: editCustomer?.textColor ?? '#15803d', fontFamily: 'sans-serif' }}>
+                  style={{ background: editCustomer?.color ?? '#dcfce7', color: editCustomer?.textColor ?? '#15803d' }}>
                   {initials || '??'}
                 </div>
                 <div>

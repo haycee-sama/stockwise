@@ -1,16 +1,27 @@
 // src/components/vendors/VendorDeleteModal.jsx
 import { Truck, X } from 'lucide-react';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 export default function VendorDeleteModal({ isOpen, vendor, onClose, onConfirm }) {
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
   if (!isOpen || !vendor) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vendor-delete-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Truck size={26} className="text-red-500" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 text-center mb-2" style={{ fontFamily: 'sans-serif' }}>
+        <h3 id="vendor-delete-modal-title" className="text-lg font-bold text-gray-900 text-center mb-2">
           Remove Vendor?
         </h3>
         <p className="text-sm text-gray-500 text-center mb-1 leading-relaxed">
@@ -22,7 +33,7 @@ export default function VendorDeleteModal({ isOpen, vendor, onClose, onConfirm }
         {vendor.pendingAmount > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5">
             <p className="text-xs text-amber-700 text-center font-medium">
-              ⚠️ This vendor has a pending balance of ₦{vendor.pendingAmount.toLocaleString()}.
+              This vendor has a pending balance of ₦{vendor.pendingAmount.toLocaleString()}.
               Make sure all payments are settled first.
             </p>
           </div>

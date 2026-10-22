@@ -20,7 +20,7 @@ export default function MobileNav() {
         <NavLink key={to} to={to}
           className={({ isActive }) =>
             `flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-all
-            ${isActive ? 'text-green-400' : 'text-white/35 hover:text-white/60'}`
+            ${isActive ? 'text-green-400' : 'text-gray-400 hover:text-white/60'}`
           }
         >
           {({ isActive }) => (

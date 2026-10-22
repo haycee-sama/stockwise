@@ -1,7 +1,8 @@
 // src/components/vendors/VendorModal.jsx
-import { useState, useEffect } from 'react';
-import { X, Truck, Loader2, Plus, Minus } from 'lucide-react';
+import { useState } from 'react';
+import { X, Truck, Loader2, Plus, Minus, CheckCircle } from 'lucide-react';
 import { vendorCategories, vendorAvatarColors } from '../../data/mockData';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 function Field({ label, error, children }) {
   return (
@@ -36,32 +37,21 @@ const emptyForm = {
 };
 
 export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
-  const [form, setForm]     = useState(emptyForm);
+  // Lazy initialiser — derives from `editVendor` if present.
+  // Combined with a `key` prop on the caller side, this replaces
+  // the previous effect-driven form sync (which fired `setState`
+  // inside `useEffect` and triggered cascading renders —
+  // react-hooks/set-state-in-effect).
+  const [form, setForm]     = useState(() => editVendor
+    ? { name: editVendor.name ?? '', contactPerson: editVendor.contactPerson ?? '', email: editVendor.email ?? '', phone: editVendor.phone ?? '', category: editVendor.category ?? '', location: editVendor.location ?? '', leadTimeDays: editVendor.leadTimeDays ?? '', note: editVendor.note ?? '', itemsSupplied: (editVendor.itemsSupplied?.length ? editVendor.itemsSupplied : ['']) }
+    : { ...emptyForm });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!editVendor;
 
-  useEffect(() => {
-    if (editVendor) {
-      setForm({
-        name:          editVendor.name          ?? '',
-        contactPerson: editVendor.contactPerson ?? '',
-        email:         editVendor.email         ?? '',
-        phone:         editVendor.phone         ?? '',
-        category:      editVendor.category      ?? '',
-        location:      editVendor.location      ?? '',
-        leadTimeDays:  editVendor.leadTimeDays  ?? '',
-        note:          editVendor.note          ?? '',
-        itemsSupplied: editVendor.itemsSupplied?.length
-          ? editVendor.itemsSupplied
-          : [''],
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setErrors({});
-  }, [editVendor, isOpen]);
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -128,7 +118,14 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vendor-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
@@ -138,7 +135,7 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
               <Truck size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: 'sans-serif' }}>
+              <h2 id="vendor-modal-title" className="text-base font-bold text-gray-900">
                 {isEditing ? 'Edit Vendor' : 'Add New Vendor'}
               </h2>
               <p className="text-xs text-gray-400">
@@ -146,7 +143,7 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>
         </div>
@@ -214,6 +211,7 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
                   />
                   {form.itemsSupplied.length > 1 && (
                     <button type="button" onClick={() => removeItem(i)}
+                      aria-label="Remove item"
                       className="w-9 h-9 flex items-center justify-center rounded-xl border border-red-200 text-red-400 hover:bg-red-50 transition-all flex-shrink-0">
                       <Minus size={14} />
                     </button>
@@ -263,7 +261,9 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
               className="flex-1 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2">
               {saving
                 ? <><Loader2 size={15} className="animate-spin" /> Saving...</>
-                : isEditing ? '✅ Save Changes' : '➕ Add Vendor'
+                : isEditing
+                  ? <><CheckCircle size={15} /> Save Changes</>
+                  : <><Plus size={15} /> Add Vendor</>
               }
             </button>
           </div>

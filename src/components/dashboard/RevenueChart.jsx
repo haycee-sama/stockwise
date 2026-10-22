@@ -1,11 +1,13 @@
 // src/components/dashboard/RevenueChart.jsx
-import { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { revenueData } from '../../data/mockData';
+import { dashboardService } from '../../services';
+import { useBusiness } from '../../context/useBusiness';
+import { useState, useEffect } from 'react';
 import { TrendingUp } from 'lucide-react';
+import { LoadingState, ErrorState } from '../common/ResourceState';
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -27,19 +29,44 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function RevenueChart() {
+  const { activeBusinessId } = useBusiness();
   const [period, setPeriod] = useState('week');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const total     = revenueData.reduce((s, d) => s + d.thisWeek, 0);
-  const lastTotal = revenueData.reduce((s, d) => s + d.lastWeek, 0);
-  const growth    = (((total - lastTotal) / lastTotal) * 100).toFixed(1);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true); setError(null);
+      const { data: svcData, error: svcError } = await dashboardService.revenue({ businessId: activeBusinessId });
+      if (!active) return;
+      if (svcError) { setError(svcError); setData(null); }
+      else { setData(svcData?.data ?? []); }
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [activeBusinessId]);
 
+  // Guard: don't compute derived values until data is loaded
+  if (loading) return <LoadingState label="Loading revenue…" />;
+  if (error) return <ErrorState error={error} />;
+  if (!data || data.length === 0) return (
+    <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-200">
+      <h3 className="text-sm font-bold text-gray-900">Revenue Overview</h3>
+      <p className="text-xs text-gray-400 mt-4">No revenue data yet.</p>
+    </div>
+  );
+
+  const total     = data.reduce((s, d) => s + d.thisWeek, 0);
+  const lastTotal = data.reduce((s, d) => s + d.lastWeek, 0);
+  const growth    = lastTotal > 0 ? (((total - lastTotal) / lastTotal) * 100).toFixed(1) : '0';
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm animate-fade-up delay-200">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
         <div>
-          <h3 className="text-sm font-bold text-gray-900"
-            style={{ fontFamily: 'sans-serif' }}>
+          <h3 className="text-sm font-bold text-gray-900">
             Revenue Overview
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">Sales performance vs previous period</p>
@@ -67,7 +94,7 @@ export default function RevenueChart() {
 
       {/* Chart */}
       <ResponsiveContainer width="100%" height={190}>
-        <BarChart data={revenueData} barGap={3} barCategoryGap="28%">
+        <BarChart data={data} barGap={3} barCategoryGap="28%">
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
           <XAxis dataKey="day" axisLine={false} tickLine={false}
             tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 500 }} />
