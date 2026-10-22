@@ -144,12 +144,18 @@ mode is active.
 ### 3.1 Pattern
 
 Each domain (inventory, sales, customers, vendors, expenses, dashboard,
-reports, businesses) has two service modules:
+reports) has two service modules:
 
 - `src/services/<domain>Mock.js` — in-memory implementation used in demo
   mode. Mutations do not persist across a page reload.
 - `src/services/<domain>Supabase.js` — Supabase-backed implementation used
   in Supabase mode. Reads and writes go through the Supabase JS client.
+
+The `businesses` domain is the exception: it has a `businessesSupabase.js`
+module but no `businessesMock.js` — businesses only make sense when the
+auth user is a real Supabase user with real business memberships. In demo
+mode, the switch-point in `src/services/index.js` returns an inlined
+mock-shaped object (`{ listMyBusinesses: async () => ({ data: [], error: null }), createBusiness: async () => ({ ... 'DEMO_MODE' }), getMyFirstBusinessId: async () => null }`).
 
 `src/services/index.js` is the single switch-point. Page components import
 from `src/services` (not directly from a variant), so the active mode is
@@ -239,9 +245,17 @@ The `user_metadata` shape the frontend reads (set during signup via the
 
 | Function | Frontend call | Payload | Expected response | Verification |
 | --- | --- | --- | --- | --- |
-| `listMyBusinesses()` | `supabase.from('sw_business_memberships').select('…, sw_businesses(*)').eq('user_id', auth.uid())` | — | Array of `{ id, name, type, currency, timezone, role, createdAt }` | supabase-tested (prior) |
+| `listMyBusinesses()` | `supabase.from('sw_business_memberships').select('role, business:sw_businesses!inner(id, name, type, currency, timezone, created_at, deleted_at)').is('business.deleted_at', null)` | — | Array of `{ id, name, type, currency, timezone, role, createdAt }` | mock-tested; supabase-tested (prior) |
 | `createBusiness({ name, type, currency, timezone })` | `supabase.rpc('sw_create_business', { p_name, p_type, p_currency, p_timezone })` | RPC args | `{ business_id, name, type, currency, timezone, role }` | supabase-tested (prior) |
 | `getMyFirstBusinessId()` | wraps `listMyBusinesses()` | — | UUID or `null` | supabase-tested (prior) |
+
+**Note on user-scoping:** the frontend does NOT add a client-side
+`user_id` filter to `listMyBusinesses()`. The `auth.uid()` function
+is server-side only and cannot be called from the browser. The
+filtering by the calling user is enforced entirely by RLS on the
+`sw_business_memberships` table — the backend developer must ensure
+the SELECT policy on `sw_business_memberships` filters by
+`auth.uid()`.
 
 **Integration assumption requiring confirmation:** The frontend assumes the
 `sw_create_business` RPC accepts `(p_name text, p_type text, p_currency
@@ -328,8 +342,13 @@ The frontend's shaped customer row is:
 `{ id, firstName, lastName, email, phone, type, location, status, note,
 joinDate, initials, color, textColor, totalSpent, totalOrders, lastOrder,
 orders }`. `initials`, `color`, `textColor` are presentation-only and
-derived client-side from the customer name. `totalSpent` and
-`totalOrders` are NOT computed by the Supabase service (returned as `0`).
+derived client-side from the customer name. `totalSpent`, `totalOrders`,
+`lastOrder`, and `orders` are computed in `get()` only (from up to 10
+recent `sw_sales` rows for the customer, with `totalSpent` summing
+completed-order totals). In `list()` these fields are returned as
+`totalSpent: 0`, `totalOrders: 0`, `lastOrder: null`, `orders: []`
+because `list()` does not perform the per-customer sales lookup (it
+would be N+1 across the page).
 
 **Integration assumption requiring confirmation:** The frontend queries a
 table named `sw_customers` with snake_case columns matching the shaped
@@ -378,11 +397,13 @@ No RPCs. Categories and payment methods are hardcoded in the service
 returns `['Cash', 'Transfer', 'Card']`).
 
 The frontend's shaped expense row is:
-`{ id, name, category, vendor, amount, payment, date, note, createdAt,
-updatedAt }`. The `category` field on the shaped row is the category ID
-(e.g. `'rent'`); the page-level code in `src/pages/ExpensesPage.jsx`
-maps the ID to a display label via the hardcoded `staticCategories`
-list in `src/data/mockData.js`.
+`{ id, name, category, vendor, amount, payment, date, note }`. The
+`category` field on the shaped row is the category ID (e.g. `'rent'`);
+the page-level code in `src/pages/ExpensesPage.jsx` maps the ID to a
+display label via the hardcoded `staticCategories` list in
+`src/data/mockData.js`. (The expense shaped row does NOT include
+`createdAt` / `updatedAt` — the table has those columns but the
+`shapeRow` function does not surface them.)
 
 **Integration assumption requiring confirmation:** The frontend queries a
 table named `sw_expenses` and writes `category` as one of `('stock',
@@ -395,27 +416,31 @@ enforced server-side.
 
 | Function | Frontend call | Notes | Verification |
 | --- | --- | --- | --- |
-| `summary()` | counts on `sw_inventory_items` + `sw_sales` | Returns 13 fields. Period-over-period deltas (`salesChange`, `profitChange`, `inventoryChange`, `lowStockChange`) are NOT computed — returned as 0. | mock-tested; **frontend-side gap** |
+| `summary()` | counts on `sw_inventory_items` + `sw_sales` | Returns 13 fields. Five of them are NOT computed and returned as `0`: `totalProfit` (no cost-vs-selling aggregation), and the four period-over-period deltas (`salesChange`, `profitChange`, `inventoryChange`, `lowStockChange`). The dashboard's "vs last month" labels are therefore misleading in Supabase mode. | mock-tested; **frontend-side gap** |
 | `revenue()` | groups by day-of-week for last 2 weeks on `sw_sales` | Returns `{ data: [{day, thisWeek, lastWeek}], total, lastTotal, growthPct }` | mock-tested |
 | `stockStatus()` | counts by derived status on `sw_inventory_items` | Returns counts for In Stock / Low Stock / Out of Stock | mock-tested |
-| `topSellersList({ limit })` | aggregates `sw_sale_items` by `item_id` | Returns top N items by qty | mock-tested |
-| `pendingOrdersList({ limit })` | `sw_sales` where `status='pending'` | **Does NOT join `sw_sale_items`** — the returned `items` field is `0`. | mock-tested; **frontend-side gap** |
-| `recentSalesList({ limit })` | recent `sw_sales` | Same — `items: []`. | mock-tested; **frontend-side gap** |
+| `topSellersList({ limit })` | aggregates `sw_sale_items` by `item_id` | Returns top N items **sorted by revenue (descending)** — not by qty. The `sold` (qty) field is computed and returned but is not the sort key. | mock-tested |
+| `lowStockList({ limit })` | `sw_inventory_items` ordered by `stock` ascending | Returns the lowest-stock items (used by `src/components/dashboard/LowStockTable.jsx`). | mock-tested |
+| `pendingOrdersList({ limit })` | `sw_sales` where `status='pending'`, joined to `sw_customers` via `customer:customer_id(first_name, last_name)` | DOES join `sw_customers` to fetch the customer name (rendered as `${first_name} ${last_name}` or `'Walk-in'` for null customers). Does NOT join `sw_sale_items` — the returned `items` field is `0`. | mock-tested; **frontend-side gap** |
+| `recentSalesList({ limit })` | recent `sw_sales`, joined to `sw_customers` (same pattern as `pendingOrdersList`) | Same: customer name is fetched, but `items: 0` (no join to `sw_sale_items`). | mock-tested; **frontend-side gap** |
 
 ### 4.9 Reports aggregates — `src/services/reportsSupabase.js`
 
 | Function | Frontend call | Notes | Verification |
 | --- | --- | --- | --- |
-| `salesReport()` | aggregates over `sw_sales` + `sw_sale_items` | `topProducts` and `paymentBreakdown` returned as `[]` (not computed). | mock-tested; **frontend-side gap** |
+| `salesReport()` | aggregates over `sw_sales` only | `topProducts` and `paymentBreakdown` returned as `[]` (the function does NOT join `sw_sale_items`, so it cannot compute per-product or per-payment aggregates today). | mock-tested; **frontend-side gap** |
 | `inventoryReport()` | aggregates over `sw_inventory_items` | `categoryReport` and `lowStock` are computed; `topProducts` returned as `[]`. | mock-tested |
-| `customersReport()` | aggregates over `sw_customers` + `sw_sales` | `acquisition` returned as `[]`; `topCustomers` returned with `totalSpent: 0, totalOrders: 0` (no join to sales). | mock-tested; **frontend-side gap** |
+| `customersReport()` | aggregates over `sw_customers` only | `acquisition` returned as `[]`; `topCustomers` returned with `totalSpent: 0, totalOrders: 0` (the function does NOT join `sw_sales`, so it cannot compute customer spend or order counts today). | mock-tested; **frontend-side gap** |
 | `expensesReport()` | aggregates over `sw_expenses` | Computed. | mock-tested |
 
-The Reports page (`src/pages/ReportsPage.jsx`) silently falls back to
-mock data from `src/data/mockData.js` for the unimplemented aggregates
-(`topProducts`, `paymentBreakdown`, `acquisition`, `topCustomers`). The
-fallback is NOT labelled on the page. This is a known honesty gap and is
-listed in Section 10.
+The Reports page (`src/pages/ReportsPage.jsx`) behaviour for the
+unimplemented aggregates differs by field (see also §9.3 for the
+full breakdown): for `topProducts`, `paymentBreakdown`, and
+`acquisition` the page uses `??` on the service response — since the
+service returns literal `[]` (not `null`/`undefined`), the page
+renders empty charts/tables in Supabase mode (no silent mock
+substitution). For `topCustomers` the page ALWAYS uses mock data
+regardless of the service response.
 
 ---
 
@@ -521,7 +546,7 @@ the Supabase code path against a live backend.
 | `src/lib/supabase.test.js` | When env vars are missing, `isSupabaseConfigured` is `false`, `supabase` client is `null`, `envSummary` honestly reports demo mode. |
 | `src/components/common/ComingSoon.test.jsx` | `ComingSoon` placeholder renders title + description; "Back to Dashboard" button navigates to `/dashboard`. |
 | `src/components/sales/NewSaleModal.test.jsx` | The modal renders when `isOpen=true` and returns `null` when `isOpen=false` (Rules-of-Hooks regression check). |
-| `src/pages/InventoryPage.test.jsx` | `InventoryPage` renders a loading state, then renders inventory after the service loads. Does NOT silently fall back to mock data on service error. |
+| `src/pages/InventoryPage.test.jsx` | `InventoryPage` renders a loading state, then renders inventory after the service loads. The file's header comment lists "does NOT silently fall back to mock data on service error" as a goal, but no actual `it(...)` block in the file tests that assertion — the 3 tests cover loading-state, render-after-load, and demo-mode-banner only. |
 | `src/services/supabaseServices.test.js` | Service-layer switch logic: `dataMode.isSupabase` is `false` in tests; dynamically imported Supabase service modules return `NOT_CONFIGURED` errors when the client is `null`. |
 
 ### 8.1 What is verified
@@ -613,9 +638,12 @@ These are gaps in the frontend's service layer — they are NOT caused by
 the backend. The backend developer should not assume the server is
 misconfigured because of these.
 
-- `dashboardSupabase.recentSalesList()` and `pendingOrdersList()` do not
-  join `sw_sale_items`. The dashboard shows "0 items" for every pending
-  order and recent sale in Supabase mode.
+- `dashboardSupabase.recentSalesList()` and `pendingOrdersList()` DO join
+  `sw_customers` (via `customer:customer_id(first_name, last_name)`) so
+  the dashboard shows the customer name on each pending order and
+  recent sale in Supabase mode. They do NOT join `sw_sale_items`, so
+  the dashboard shows "0 items" for each row (the `items` field is
+  `0`).
 - `dashboardSupabase.summary()` does not compute period-over-period
   deltas (`salesChange`, `profitChange`, `inventoryChange`,
   `lowStockChange` are 0). The dashboard's "vs last month" labels are
@@ -624,18 +652,32 @@ misconfigured because of these.
   `sw_customers` or `sw_inventory_items`. The Sales page shows the
   customer name as "Unknown" and line-item names as "Unknown item" in
   Supabase mode.
-- `customersSupabase.get()` does not aggregate `totalSpent` /
-  `totalOrders` (returned as 0).
-- `customersSupabase.list()` returns `orders[i].items = 0` (no join to
-  line items).
+- `customersSupabase.list()` does not perform the per-customer sales
+  lookup that `get()` performs. In `list()` the shaped row's
+  `totalSpent`, `totalOrders`, `lastOrder`, and `orders` fields are
+  returned as `0`, `0`, `null`, and `[]` respectively (the list view
+  does not show per-customer aggregates — only the detail drawer does).
+  `get()` does compute these fields from up to 10 recent `sw_sales`
+  rows, but `orders[i].items` is `0` (no join to `sw_sale_items`).
 - `vendorsSupabase.get()` returns `orders[i].items = 0` (no join to
   `sw_purchase_order_items`).
 - `reportsSupabase.salesReport()` returns `topProducts: []` and
-  `paymentBreakdown: []` (not computed). The Reports page silently
-  falls back to mock data for these.
+  `paymentBreakdown: []` (not computed).
 - `reportsSupabase.customersReport()` returns `acquisition: []` and
-  `topCustomers[i].totalSpent = 0, totalOrders = 0`. The Reports page
-  silently falls back to mock data for these.
+  `topCustomers[i].totalSpent = 0, totalOrders = 0` (no join to
+  `sw_sales` to compute the aggregates).
+- **Reports page fallback behaviour** (`src/pages/ReportsPage.jsx`):
+  the page uses the `??` (nullish-coalescing) operator on the service
+  response for `topProducts`, `paymentBreakdown`, and `acquisition`.
+  Because `??` only triggers on `null`/`undefined` (NOT on empty
+  arrays `[]`), and the Supabase service returns literal `[]` for
+  these fields, the page renders **empty tables/charts in Supabase
+  mode** — it does NOT silently substitute mock data for these
+  three. The exception is `topCustomers`: the page always uses mock
+  data (`fallbackCustomers`) for the top-customers table regardless
+  of the service response — it never reads
+  `reports.customers?.topCustomers`. This is an honest gap in the
+  Reports page, NOT a silent substitution.
 
 ### 9.4 Mock-data leakage
 
@@ -656,13 +698,14 @@ visible.
 
 ### 9.6 Hardcoded `alert()` calls
 
-Two call sites use the native `alert()` to surface errors:
+One call site uses the native `alert()` to surface errors:
 
-- `src/pages/VendorsPage.jsx` — PO receive failure.
-- `src/pages/auth/ForgotPasswordPage.jsx` — success message after the
-  reset link is sent.
+- `src/pages/VendorsPage.jsx` `handleReceive` — PO receive failure.
 
-These are blocking native dialogs, not non-blocking toasts.
+The blocking native dialog should be replaced with a non-blocking
+toast. (An earlier audit also flagged `src/pages/auth/ForgotPasswordPage.jsx`,
+but that file does NOT use `alert()` — it renders success inline via
+`setSubmitted(true)` + a styled `<CheckCircle>` + `<h2>` block.)
 
 ### 9.7 Dashboard "Fulfil" button
 
@@ -748,7 +791,7 @@ observable contract the frontend currently depends on.
 | 11 | The frontend queries tables named `sw_businesses`, `sw_business_memberships`, `sw_customers`, `sw_vendors`, `sw_inventory_items`, `sw_sales`, `sw_sale_items`, `sw_purchase_orders`, `sw_purchase_order_items`, `sw_stock_movements`, `sw_expenses`. (The `sw_audit_log` and `sw_display_id_counters` names appear in earlier audit docs only — they are not queried by current frontend code in this branch.) | `src/services/*Supabase.js` |
 | 12 | The `payment` field on `sw_sales` and `sw_expenses` accepts `'Cash'`, `'Transfer'`, or `'Card'`. The frontend standardised on `'Card'` (the user-facing label is `"Card / POS"`). The frontend no longer sends `'POS'`. | `src/components/sales/NewSaleModal.jsx`, `src/components/sales/ViewOrderModal.jsx`, `src/pages/SalesPage.jsx`, `src/data/mockData.js` |
 | 13 | The `category` field on `sw_inventory_items` accepts `'Clothing'`, `'Footwear'`, `'Accessories'`, or `'Other'`. The `category` field on `sw_vendors` accepts `'Clothing & Accessories'`, `'Footwear'`, `'Leather Goods'`, `'Accessories'`, or `'Other'`. The `category` field on `sw_expenses` accepts `'stock'`, `'rent'`, `'transport'`, `'utilities'`, `'marketing'`, `'salaries'`, `'packaging'`, or `'other'`. | `src/services/*Supabase.js`, `src/data/mockData.js` |
-| 14 | The `status` field on `sw_sales` accepts `'completed'`, `'pending'`, `'cancelled'`. The `status` field on `sw_purchase_orders` accepts `'pending'`, `'delivered'`, `'cancelled'`. The `status` field on `sw_customers` accepts `'active'`, `'new'`, `'owing'`, `'inactive'`. | `src/services/*Supabase.js`, `src/data/mockData.js` |
+| 14 | The `status` field on `sw_sales` accepts `'completed'`, `'pending'`, `'cancelled'`. The `status` field on `sw_purchase_orders` accepts `'pending'`, `'delivered'`, `'cancelled'`. The `status` field on `sw_customers` accepts `'active'`, `'new'`, `'owing'`, `'inactive'`. The `status` field on `sw_vendors` accepts `'active'`, `'inactive'` (the frontend's `vendorsSupabase.create()` honours `payload.status ?? 'active'`; the `vendorsSupabase.list()` filter does `.eq('status', status.toLowerCase())` so the DB stores lowercase values; the `listStatuses()` helper returns the capitalized display labels `['Active', 'Inactive']`). | `src/services/*Supabase.js`, `src/data/mockData.js` |
 | 15 | Money is stored as `numeric(14, 2)` in the business's reporting currency. The frontend does not perform currency conversion. | `src/services/*Supabase.js` (no conversion logic present) |
 
 The backend developer is free to design the database, RLS, and
