@@ -82,7 +82,8 @@ export async function list({
 
   let query = supabase
     .from('sw_inventory_items')
-    .select('*', { count: 'exact' });
+    .select('*', { count: 'exact' })
+    .is('deleted_at', null);
 
   if (search) {
     // PostgREST `ilike` is case-insensitive. OR across name/sku/category.

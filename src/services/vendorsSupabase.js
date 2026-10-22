@@ -126,7 +126,12 @@ export async function create(payload) {
     lead_time_days: Number(payload.leadTimeDays) || 7,
     rating: Number(payload.rating) || 4,
     note: payload.note || null,
-    status: 'active',
+    // Honour the caller's status; default to 'active' only when not
+    // supplied. The previous implementation hardcoded 'active' and
+    // silently dropped any caller-provided status, which meant the
+    // create form could not create an 'inactive' vendor even when
+    // the user picked that option from the dropdown.
+    status: payload.status ?? 'active',
   };
   const { data: row, error } = await supabase
     .from('sw_vendors')
