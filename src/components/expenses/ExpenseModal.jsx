@@ -8,6 +8,7 @@ import {
 import { expenseCategories, expensePaymentMethods } from '../../data/mockData';
 import { vendorsService } from '../../services';
 import { useBusiness } from '../../context/useBusiness';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const iconMap = { Package, Home, Truck, Zap, Megaphone, Users, MailOpen, Wrench };
 const pmtIcons = { Cash: Banknote, Transfer: Building2, Card: CreditCard };
@@ -68,6 +69,9 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
 
   const isEditing = !!editExpense;
 
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const handleChange = (e) => {
@@ -114,7 +118,14 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
   // Vendor suggestions from vendorsData
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="expense-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
@@ -124,7 +135,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
               <Receipt size={17} className="text-red-500" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900">
+              <h2 id="expense-modal-title" className="text-base font-bold text-gray-900">
                 {isEditing ? 'Edit Expense' : 'Add New Expense'}
               </h2>
               <p className="text-xs text-gray-400">
@@ -133,6 +144,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, editExpense }) {
             </div>
           </div>
           <button onClick={onClose}
+            aria-label="Close"
             className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>

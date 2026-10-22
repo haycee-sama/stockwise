@@ -21,8 +21,10 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock, ArrowRight, Loader2, CheckCircle, AlertCircle, Package } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
+import { useDocumentTitle } from '../../utils/useDocumentTitle';
 
 export default function ResetPasswordPage() {
+  useDocumentTitle('Reset password — Stockwise');
   const navigate = useNavigate();
   const { authMode } = useAuth();
 
@@ -131,7 +133,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Set a new password</h2>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Set a new password</h1>
           <p className="text-sm text-gray-500 mb-6">
             Enter a new password for your Stockwise account.
           </p>
@@ -167,7 +169,7 @@ export default function ResetPasswordPage() {
               <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-4">
                 <CheckCircle size={26} className="text-green-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Password updated</h3>
+              <h2 className="text-lg font-bold text-gray-900 mb-2">Password updated</h2>
               <p className="text-sm text-gray-500 mb-6">
                 Your password has been updated. Redirecting to login…
               </p>
@@ -179,11 +181,15 @@ export default function ResetPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">New password</label>
+                <label htmlFor="reset-password" className="block text-sm font-medium text-gray-700 mb-1.5">New password</label>
                 <div className="relative">
-                  <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
                   <input
+                    id="reset-password"
                     type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Min. 8 characters"
@@ -192,6 +198,7 @@ export default function ResetPasswordPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(s => !s)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                     className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-xs font-semibold text-gray-500 hover:text-gray-700"
                   >
                     {showPassword ? 'Hide' : 'Show'}
@@ -200,11 +207,15 @@ export default function ResetPasswordPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm password</label>
+                <label htmlFor="reset-confirm" className="block text-sm font-medium text-gray-700 mb-1.5">Confirm password</label>
                 <div className="relative">
-                  <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
                   <input
+                    id="reset-confirm"
                     type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirm(e.target.value)}
                     placeholder="Repeat your password"

@@ -488,7 +488,7 @@ export default function DashboardPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr>
                     {['Customer', 'Items', 'Total', 'Status'].map(h => (
-                      <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
+                      <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
                     ))}
                   </tr>
                 </thead>

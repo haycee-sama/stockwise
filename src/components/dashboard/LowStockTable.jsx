@@ -57,10 +57,10 @@ export default function LowStockTable() {
         <table className="w-full min-w-[380px]">
           <thead>
             <tr className="border-b border-gray-50">
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-5 sm:px-6 py-2.5">Product</th>
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Stock</th>
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Status</th>
-              <th className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Action</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-5 sm:px-6 py-2.5">Product</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Stock</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Status</th>
+              <th scope="col" className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2.5">Action</th>
             </tr>
           </thead>
           <tbody>

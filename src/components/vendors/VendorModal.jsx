@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { X, Truck, Loader2, Plus, Minus, CheckCircle } from 'lucide-react';
 import { vendorCategories, vendorAvatarColors } from '../../data/mockData';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 function Field({ label, error, children }) {
   return (
@@ -48,6 +49,9 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!editVendor;
+
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -114,7 +118,14 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vendor-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
@@ -124,7 +135,7 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
               <Truck size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900">
+              <h2 id="vendor-modal-title" className="text-base font-bold text-gray-900">
                 {isEditing ? 'Edit Vendor' : 'Add New Vendor'}
               </h2>
               <p className="text-xs text-gray-400">
@@ -132,7 +143,7 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>
         </div>
@@ -200,6 +211,7 @@ export default function VendorModal({ isOpen, onClose, onSave, editVendor }) {
                   />
                   {form.itemsSupplied.length > 1 && (
                     <button type="button" onClick={() => removeItem(i)}
+                      aria-label="Remove item"
                       className="w-9 h-9 flex items-center justify-center rounded-xl border border-red-200 text-red-400 hover:bg-red-50 transition-all flex-shrink-0">
                       <Minus size={14} />
                     </button>

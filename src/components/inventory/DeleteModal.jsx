@@ -1,12 +1,23 @@
 // src/components/inventory/DeleteModal.jsx
 import { Trash2, X, AlertTriangle } from 'lucide-react';
 import { ItemIcon } from '../../utils/inventoryIcons';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 export default function DeleteModal({ isOpen, item, onClose, onConfirm }) {
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
   if (!isOpen || !item) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-sm shadow-2xl rounded-t-2xl animate-fade-up">
 
         {/* Handle bar (mobile) */}
@@ -20,7 +31,7 @@ export default function DeleteModal({ isOpen, item, onClose, onConfirm }) {
             <Trash2 size={24} className="text-red-500" />
           </div>
 
-          <h3 className="text-base font-bold text-gray-900 text-center mb-2">
+          <h3 id="delete-modal-title" className="text-base font-bold text-gray-900 text-center mb-2">
             Delete Item?
           </h3>
 

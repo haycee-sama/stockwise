@@ -126,6 +126,7 @@ function CustomerCard({ customer, onView, onEdit, onDelete }) {
           <Edit2 size={12} /> Edit
         </button>
         <button onClick={() => onDelete(customer)}
+          aria-label="Delete"
           className="w-8 flex items-center justify-center py-2 text-gray-400 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
           <Trash2 size={12} />
         </button>
@@ -298,6 +299,7 @@ export default function CustomersPage() {
                 className="w-full pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all" />
               {search && (
                 <button onClick={() => setSearch('')}
+                  aria-label="Clear search"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                   <X size={14} />
                 </button>
@@ -315,11 +317,13 @@ export default function CustomersPage() {
             </span>
             <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               <button onClick={() => setViewMode('grid')}
+                aria-label="Grid view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'grid' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <LayoutGrid size={14} />
               </button>
               <button onClick={() => setViewMode('list')}
+                aria-label="List view"
                 className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all
                   ${viewMode === 'list' ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
                 <List size={14} />
@@ -396,7 +400,7 @@ export default function CustomersPage() {
                 <thead className="bg-gray-50/80 border-b border-gray-100">
                   <tr>
                     {['Customer', 'Type', 'Contact', 'Location', 'Spent', 'Orders', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">{h}</th>
+                      <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-3">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -436,9 +440,9 @@ export default function CustomersPage() {
                       <td className="px-4 py-3.5"><StatusBadge status={c.status} /></td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => openView(c)} className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-green-50 hover:border-green-200 hover:text-green-600 text-gray-400 transition-all"><Eye size={12} /></button>
-                          <button onClick={() => openEdit(c)} className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"><Edit2 size={12} /></button>
-                          <button onClick={() => openDel(c)} className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all"><Trash2 size={12} /></button>
+                          <button onClick={() => openView(c)} aria-label="View" className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-green-50 hover:border-green-200 hover:text-green-600 text-gray-400 transition-all"><Eye size={12} /></button>
+                          <button onClick={() => openEdit(c)} aria-label="Edit" className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 text-gray-400 transition-all"><Edit2 size={12} /></button>
+                          <button onClick={() => openDel(c)} aria-label="Delete" className="w-7 h-7 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-500 text-gray-400 transition-all"><Trash2 size={12} /></button>
                         </div>
                       </td>
                     </tr>

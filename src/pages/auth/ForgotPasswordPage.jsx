@@ -16,8 +16,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, ArrowRight, Loader2, CheckCircle, AlertCircle, Package } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
+import { useDocumentTitle } from '../../utils/useDocumentTitle';
 
 export default function ForgotPasswordPage() {
+  useDocumentTitle('Forgot password — Stockwise');
   const { authMode } = useAuth();
   const [email, setEmail]       = useState('');
   const [errors, setErrors]     = useState({});
@@ -82,7 +84,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Reset your password</h2>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Reset your password</h1>
           <p className="text-sm text-gray-500 mb-6">
             Enter the email you signed up with and we&apos;ll send you a link to reset your password.
           </p>
@@ -106,9 +108,9 @@ export default function ForgotPasswordPage() {
               <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-4">
                 <CheckCircle size={26} className="text-green-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">
+              <h2 className="text-lg font-bold text-gray-900 mb-2">
                 {authMode === 'demo' ? 'Demo request received' : 'Check your email'}
-              </h3>
+              </h2>
               <p className="text-sm text-gray-500 mb-6">
                 {authMode === 'demo'
                   ? 'In demo mode no email is actually sent. Configure Supabase to enable real password-reset emails.'
@@ -122,16 +124,21 @@ export default function ForgotPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="forgot-email" className="block text-sm font-medium text-gray-700 mb-1.5">
                   Email address
                 </label>
                 <div className="relative">
-                  <Mail size={18} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${errors.email ? 'text-red-400' : 'text-gray-400'}`} />
+                  <Mail size={18} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${errors.email ? 'text-red-400' : 'text-gray-400'}`} aria-hidden="true" />
                   <input
+                    id="forgot-email"
                     type="email"
+                    required
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: '' })); }}
                     placeholder="you@business.com"
+                    aria-invalid={!!errors.email}
+                    aria-describedby={errors.email ? 'forgot-email-error' : undefined}
                     className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm outline-none transition-all
                       ${errors.email
                         ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-2 focus:ring-red-100'
@@ -139,7 +146,7 @@ export default function ForgotPasswordPage() {
                       }`}
                   />
                 </div>
-                {errors.email && <p className="mt-1.5 text-xs text-red-500">⚠ {errors.email}</p>}
+                {errors.email && <p id="forgot-email-error" role="alert" className="mt-1.5 text-xs text-red-500"><span aria-hidden="true">⚠</span> {errors.email}</p>}
               </div>
 
               <button

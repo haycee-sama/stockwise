@@ -295,6 +295,7 @@ export default function SignupForm() {
                     ${errors.password ? 'border-red-300 bg-red-50' : 'border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100'}`}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                   className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600">
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -320,6 +321,7 @@ export default function SignupForm() {
                     ${errors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100'}`}
                 />
                 <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                  aria-label={showConfirm ? 'Hide password' : 'Show password'}
                   className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600">
                   {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>

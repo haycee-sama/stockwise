@@ -265,13 +265,13 @@ function SalesReport({ reports = {} }) {
             <table className="w-full min-w-[380px]">
               <thead><tr className="bg-gray-50/80 border-b border-gray-100">
                 {['#','Product','Sold','Revenue','Growth'].map(h => (
-                  <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
+                  <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
                 ))}
               </tr></thead>
               <tbody>
                 {topProducts.map((p, i) => (
                   <tr key={p.name} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-4 py-3"><span className="text-xs font-bold text-gray-300">{i+1}</span></td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-gray-500">{i+1}</span></td>
                     <td className="px-4 py-3">
                       <p className="text-xs font-semibold text-gray-800">{p.name}</p>
                       <p className="text-[10px] text-gray-400">{p.category}</p>
@@ -462,13 +462,13 @@ function CustomerReport({ reports = {} }) {
           <table className="w-full min-w-[500px]">
             <thead><tr className="bg-gray-50/80 border-b border-gray-100">
               {['#','Customer','Type','Orders','Spent','Status'].map(h => (
-                <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
+                <th scope="col" key={h} className="text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 px-4 py-2.5">{h}</th>
               ))}
             </tr></thead>
             <tbody>
               {topCustomers.map((c, i) => (
                 <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3"><span className="text-xs font-bold text-gray-300">{i+1}</span></td>
+                  <td className="px-4 py-3"><span className="text-xs font-bold text-gray-500">{i+1}</span></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
@@ -557,7 +557,7 @@ function ExpensesReport({ reports = {} }) {
           <div className="divide-y divide-gray-50">
             {[...(reports.expenses?.categoryReport ?? fallbackExpCat)].sort((a, b) => b.amount - a.amount).slice(0, 5).map((e, i) => (
               <div key={e.name} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
-                <span className="text-xs font-bold text-gray-300 w-4">{i+1}</span>
+                <span className="text-xs font-bold text-gray-500 w-4">{i+1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-gray-800 truncate">{e.name}</p>
                   <p className="text-[10px] text-gray-400">{e.pct}% of total</p>

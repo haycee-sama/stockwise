@@ -1,5 +1,6 @@
 // src/components/vendors/VendorDrawer.jsx
 import { X, Phone, Mail, MapPin, Calendar, Package, Edit2, Star, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 const formatDate = (iso) => iso
@@ -33,18 +34,30 @@ function OrderStatusBadge({ status }) {
 }
 
 export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder, onReceive }) {
+  // Drawer accessibility: Escape-to-close. (Backdrop has its own
+  // onClick={onClose}; panel stops click-propagation so clicks inside
+  // the drawer do not bubble up to the backdrop and dismiss it.)
+  const { onKeyDown } = useModalBehavior(!!vendor, onClose);
+
   if (!vendor) return null;
 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col"
-        style={{ animation: 'slideIn .25s ease' }}>
+      <div
+        className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col"
+        style={{ animation: 'slideIn .25s ease' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vendor-drawer-title"
+        onKeyDown={onKeyDown}
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-base font-bold text-gray-900">
+          <h2 id="vendor-drawer-title" className="text-base font-bold text-gray-900">
             Vendor Profile
           </h2>
           <div className="flex items-center gap-2">
@@ -56,7 +69,7 @@ export default function VendorDrawer({ vendor, onClose, onEdit, onPlaceOrder, on
               className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-all">
               <Edit2 size={12} /> Edit
             </button>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
+            <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
               <X size={17} />
             </button>
           </div>

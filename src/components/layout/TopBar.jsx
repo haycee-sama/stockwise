@@ -37,7 +37,7 @@ export default function TopBar({ title, subtitle, actions }) {
                   {title}
                 </h1>
                 {subtitle && (
-                  <p className="text-xs text-gray-400 truncate hidden sm:block">{subtitle}</p>
+                  <p className="text-xs text-gray-500 truncate hidden sm:block">{subtitle}</p>
                 )}
               </>
             ) : (
@@ -45,7 +45,7 @@ export default function TopBar({ title, subtitle, actions }) {
                 <h1 className="text-lg sm:text-xl font-bold text-gray-900">
                   {getGreeting()}, {user?.firstName}
                 </h1>
-                <p className="text-xs text-gray-400 hidden sm:block">{today}</p>
+                <p className="text-xs text-gray-500 hidden sm:block">{today}</p>
               </>
             )}
           </div>
@@ -65,6 +65,7 @@ export default function TopBar({ title, subtitle, actions }) {
 
             {/* Mobile search toggle */}
             <button onClick={() => setShowSearch(s => !s)}
+              aria-label="Search"
               className="md:hidden w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-all">
               <Search size={16} />
             </button>
@@ -73,6 +74,7 @@ export default function TopBar({ title, subtitle, actions }) {
             <div className="relative">
               <button
                 onClick={() => setShowNotif(v => !v)}
+                aria-label="Notifications"
                 className="relative w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-all text-gray-500">
                 <Bell size={16} />
                 {unreadCount > 0 && (
@@ -129,6 +131,7 @@ export default function TopBar({ title, subtitle, actions }) {
             {/* Mobile: action menu toggle */}
             {actions && (
               <button onClick={() => setMobileMenu(v => !v)}
+                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
                 className="sm:hidden w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-all">
                 {mobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
               </button>

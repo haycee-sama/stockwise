@@ -4,6 +4,7 @@ import {
   Banknote, Building2, CreditCard, User,
   Package, FileText, Calendar, Hash,
 } from 'lucide-react';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 const naira = (v) => `₦${Number(v).toLocaleString()}`;
 
@@ -27,6 +28,9 @@ const paymentConfig = {
 };
 
 export default function ViewOrderModal({ isOpen, order, onClose }) {
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
   if (!isOpen || !order) return null;
 
   const status = statusConfig[order.status] ?? statusConfig.completed;
@@ -35,7 +39,14 @@ export default function ViewOrderModal({ isOpen, order, onClose }) {
   const PmtIcon = pmtCfg.icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="view-order-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-md shadow-2xl rounded-t-2xl animate-fade-up"
         style={{ maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}>
 
@@ -51,7 +62,7 @@ export default function ViewOrderModal({ isOpen, order, onClose }) {
               <FileText size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900">
+              <h2 id="view-order-modal-title" className="text-sm font-bold text-gray-900">
                 Order Receipt
               </h2>
               <div className="flex items-center gap-1.5 mt-0.5">
@@ -65,6 +76,7 @@ export default function ViewOrderModal({ isOpen, order, onClose }) {
               <Printer size={13} /> Print
             </button>
             <button onClick={onClose}
+              aria-label="Close"
               className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
               <X size={17} />
             </button>

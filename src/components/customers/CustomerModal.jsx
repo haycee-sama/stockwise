@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { X, Users, Loader2, CheckCircle, Phone, Mail, MapPin, Building2 } from 'lucide-react';
 import { customerTypes, avatarColors } from '../../data/mockData';
+import { useModalBehavior } from '../../utils/useModalBehavior';
 
 function Field({ label, required, error, children }) {
   return (
@@ -56,6 +57,9 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
   const [saving, setSaving] = useState(false);
   const isEditing = !!editCustomer;
 
+  // Modal accessibility: Escape-to-close + backdrop-click-to-close.
+  const { onKeyDown, onBackdropClick } = useModalBehavior(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const handleChange = (e) => {
@@ -105,7 +109,14 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
   const initials = `${form.firstName?.[0] ?? ''}${form.lastName?.[0] ?? ''}`.toUpperCase();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="customer-modal-title"
+      onKeyDown={onKeyDown}
+      onClick={onBackdropClick}
+    >
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg shadow-2xl rounded-t-2xl animate-fade-up"
         style={{ maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}>
 
@@ -121,7 +132,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
               <Users size={17} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900">
+              <h2 id="customer-modal-title" className="text-sm font-bold text-gray-900">
                 {isEditing ? 'Edit Customer' : 'Add Customer'}
               </h2>
               <p className="text-[11px] text-gray-400">
@@ -129,7 +140,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, editCustomer })
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-all">
             <X size={17} />
           </button>
         </div>
