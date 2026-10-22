@@ -1,0 +1,24 @@
+# Stockwise robots.txt
+#
+# Stockwise is an authenticated single-page application. The only
+# indexable public routes are the auth screens (login, signup,
+# forgot-password, reset-password). Internal routes — dashboard,
+# inventory, sales, customers, vendors, expenses, reports, settings,
+# documents — are behind authentication and contain no useful
+# indexable content for unauthenticated visitors.
+#
+# The root URL ("/") is the brand-discovery entry point. It redirects
+# unauthenticated visitors to /login. We allow indexing of the root
+# so the brand is discoverable in search engines, but block following
+# of links (every link from the entry goes to an auth-walled route).
+
+User-agent: *
+Allow: /$
+Allow: /login
+Allow: /signup
+Allow: /forgot-password
+Allow: /reset-password
+Disallow: /
+
+# Sitemap (public routes only)
+Sitemap: https://stockwise-rho.vercel.app/sitemap.xml
