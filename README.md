@@ -16,8 +16,8 @@ The application is a single-page React frontend. It runs in two modes:
   persists across a page reload. A banner at the top of every page makes
   this honest.
 
-The backend handover (data contract, required RPCs, RLS policies,
-acceptance criteria) is documented in
+The backend handover (frontend architecture, integration points,
+verification status, and integration assumptions) is documented in
 [`docs/BACKEND_HANDOVER.md`](./docs/BACKEND_HANDOVER.md).
 
 ---
@@ -56,7 +56,7 @@ Package manager: npm (lockfile `package-lock.json`).
 ├── public/
 │   └── favicon.svg
 ├── docs/
-│   └── BACKEND_HANDOVER.md     # Backend integration contract
+│   └── BACKEND_HANDOVER.md     # Frontend handover for backend integration
 └── src/
     ├── main.jsx                # React entry
     ├── App.jsx                 # Router + route guards
@@ -203,37 +203,37 @@ singleton, ComingSoon, NewSaleModal, InventoryPage, service layer).
 
 ## How the frontend connects to the backend
 
-The frontend uses the Supabase JS client (`@supabase/supabase-js`) for:
+The frontend uses the Supabase JS client (`@supabase/supabase-js`) for
+three categories of operation:
 
 - **Auth** — `signInWithPassword`, `signUp`, `signOut`,
   `resetPasswordForEmail`, `getSession`, `onAuthStateChange`. See
   `src/context/AuthContext.jsx`.
-- **Data** — PostgREST CRUD on `sw_*` tables, scoped by RLS. See the
-  `src/services/*Supabase.js` modules.
-- **Atomic server-side operations** — four `SECURITY DEFINER` RPC
-  functions: `sw_create_business`, `sw_create_sale`, `sw_adjust_stock`,
-  `sw_receive_purchase_order`. See `src/services/businessesSupabase.js`,
-  `src/services/salesSupabase.js`, `src/services/inventorySupabase.js`,
-  `src/services/vendorsSupabase.js`.
+- **Data** — PostgREST CRUD on `sw_*` tables, scoped per-business by the
+  backend's RLS policies. See the `src/services/*Supabase.js` modules.
+- **Atomic server-side operations** — the frontend calls server-side
+  RPCs for operations that must be transactional (sale creation, stock
+  adjustment, purchase-order receiving, business provisioning). See
+  `src/services/businessesSupabase.js`, `src/services/salesSupabase.js`,
+  `src/services/inventorySupabase.js`, `src/services/vendorsSupabase.js`.
 
 The single switch-point is in `src/services/index.js`. Each domain
 (inventory, sales, customers, vendors, expenses, dashboard, reports) has
 both a mock and a Supabase variant; the active variant is selected at
 import time based on `isSupabaseConfigured`.
 
-For the full data contract, required RLS policies, and RPC signatures,
-see [`docs/BACKEND_HANDOVER.md`](./docs/BACKEND_HANDOVER.md).
+For the full integration contract — function names, payload shapes,
+expected response shapes, verification status, and integration
+assumptions requiring confirmation — see
+[`docs/BACKEND_HANDOVER.md`](./docs/BACKEND_HANDOVER.md).
 
 ---
 
-## Known limitations and required integration steps
+## Known frontend-side limitations
 
 These items are documented in detail in `docs/BACKEND_HANDOVER.md` →
-Section F. A brief summary:
+Section 9 (Frontend-side limitations). A brief summary:
 
-- **Backend must be applied:** the SQL schema, RLS policies, and RPC
-  functions described in the handover are required before the app will
-  operate in Supabase mode.
 - **Settings and Documents pages** are placeholders — they render a
   ComingSoon component.
 - **TopBar search and notifications** are disabled with honest
@@ -249,6 +249,11 @@ Section F. A brief summary:
 - **Sales list** shows "Unknown" as the customer name and line-item name
   in Supabase mode — the service does not yet join `sw_customers` /
   `sw_inventory_items` in `list()`.
+- **Supabase mode requires a configured backend.** When `VITE_SUPABASE_URL`
+  and `VITE_SUPABASE_PUBLISHABLE_KEY` are set, the frontend expects to
+  talk to a Supabase project whose API contract matches the integration
+  assumptions in `docs/BACKEND_HANDOVER.md` Section 11. Without them,
+  the frontend runs in demo mode.
 
 These gaps are honest — the frontend surfaces real data when available
 and falls back to mock or empty state when not.

@@ -1,578 +1,759 @@
-# Stockwise — Backend Handover
+# Stockwise — Frontend Handover for Backend Integration
 
-This document describes what the backend developer needs to implement, configure,
-or verify for the Stockwise frontend to function end-to-end. It is written for the
-engineer taking over backend responsibility. The frontend developer's work is
-delivered; the items below remain with the backend.
+This document describes the Stockwise frontend as delivered. It is written for
+the backend engineer who will integrate with it. It documents what the
+frontend provides, what API contracts it calls, what response shapes it
+expects, and which integration points are verified versus unverified.
 
-All API contracts documented here are derived from the actual source code in
-`src/services/*Supabase.js` and `src/lib/supabase.js`. No endpoints, fields, or
-behaviours are invented — where a contract is unverified, it is marked
-**requires confirmation**.
+The backend architecture — database schema design, Row-Level Security
+policies, server-side business logic, RPC implementation, deployment
+topology, and operational configuration — is the backend developer's
+independent responsibility and is not specified here.
 
----
+Where the frontend makes an assumption about the shape of a response or the
+name of a callable, that assumption is documented as an **integration
+assumption requiring confirmation**. Backend developers should confirm or
+renegotiate those assumptions before relying on them.
 
-## A. Project boundary
-
-**Delivered (frontend):**
-- React 19.2 single-page application built with Vite 8.
-- Entry point: `src/main.jsx` → `src/App.jsx` (BrowserRouter + nested routes).
-- Source layout:
-  - `src/pages/` — top-level route components.
-  - `src/components/` — presentational + modal components.
-  - `src/context/` — `AuthProvider` and `BusinessProvider` (active-business
-    provisioning).
-  - `src/services/` — data-access layer; one module per domain entity, with a
-    mock and a Supabase-backed variant per domain (see `src/services/index.js`
-    for the switch-point).
-  - `src/lib/` — typed env access (`env.js`) and the Supabase client singleton
-    (`supabase.js`).
-  - `src/utils/` — icon-mapping and other pure helpers.
-- Styling: Tailwind CSS 3.4. Charts: recharts 3.8. Icons: lucide-react.
-- Tests: Vitest + React Testing Library, 39 passing smoke tests.
-
-**Remains with the backend developer:**
-- Database schema, migrations, constraints, and indexes.
-- Row-Level Security (RLS) policies on every tenant-scoped table.
-- Server-side business logic exposed as PostgreSQL RPC functions
-  (SECURITY DEFINER).
-- Authentication configuration (Supabase Auth provider settings, email
-  templates, redirect URLs).
-- Any server-side scheduled jobs, webhooks, or third-party integrations
-  (e.g. email delivery, payment gateways) the product may later require.
-- Verification that the data returned by the API matches the shapes the
-  frontend expects (Section D).
-
-The frontend is delivered against the Supabase JS client v2.118. If the backend
-is migrated away from Supabase to a custom REST/GraphQL server, the service
-modules in `src/services/*Supabase.js` become the canonical contract: every
-function there maps one-to-one to an endpoint that the replacement server
-must provide.
+All claims in this document are derived from the actual source code in
+`src/services/*Supabase.js`, `src/lib/supabase.js`, `src/context/*.jsx`, and
+`src/pages/*.jsx`. No endpoints, fields, or behaviours are invented.
 
 ---
 
-## B. Frontend-to-backend integration
+## 1. Frontend architecture
 
-### B.1 Environment configuration
+### 1.1 Application type and entry point
 
-The frontend reads these public env vars (see `.env.example` and
-`src/lib/env.js`):
+Stockwise is a single-page React application. The application entry is
+`src/main.jsx`, which renders `src/App.jsx`. Routing uses
+`react-router-dom` 7.13 with `BrowserRouter` and a nested `<Route>` tree.
 
-| Variable | Purpose | Required |
+### 1.2 Source layout
+
+| Directory | Responsibility |
+| --- | --- |
+| `src/pages/` | Top-level route components. |
+| `src/components/` | Presentational components and modals, grouped by domain (`auth/`, `common/`, `customers/`, `dashboard/`, `expenses/`, `inventory/`, `layout/`, `sales/`, `vendors/`). |
+| `src/context/` | React context providers: `AuthProvider` (auth session) and `BusinessProvider` (active-business selection). Bare context objects live in `auth-context-instance.js` and `business-context-instance.js` so they can be imported by tests without triggering the provider's `useEffect`. |
+| `src/lib/` | Typed env access (`env.js`) and the Supabase client singleton (`supabase.js`). |
+| `src/services/` | Data-access layer. One module per domain, each with a mock variant and a Supabase-backed variant. The active variant is selected by `src/services/index.js` at import time. |
+| `src/data/` | `mockData.js` — seed data for demo mode plus the category / type / status enumerations used by select dropdowns. |
+| `src/utils/` | Pure helpers (`inventoryIconData.js`, `inventoryIcons.jsx`). |
+| `src/test/` | Vitest setup (`setup.js`). |
+
+### 1.3 Technologies
+
+| Layer | Choice |
+| --- | --- |
+| Framework | React 19.2 |
+| Routing | react-router-dom 7.13 |
+| Language | JavaScript (JSX) |
+| Build tool | Vite 8 (with `@vitejs/plugin-react`, Rolldown) |
+| Styling | Tailwind CSS 3.4 |
+| Charts | recharts 3.8 |
+| Icons | lucide-react 0.577 |
+| Auth + data client | `@supabase/supabase-js` 2.118 |
+| Lint | ESLint 9.39 flat config |
+| Tests | Vitest 5 + `@testing-library/react` 16 + jsdom 25 |
+
+### 1.4 Route tree (verified in `src/App.jsx`)
+
+| Path | Component | Guard |
 | --- | --- | --- |
-| `VITE_SUPABASE_URL` | Supabase project URL. | Yes — without it the app runs in demo mode. |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) key. **NOT the service_role key.** | Yes — without it the app runs in demo mode. |
-| `VITE_PUBLIC_APP_URL` | Public-facing app URL; used as the password-reset `redirectTo`. | Yes for password-reset to land on `/reset-password`. |
-| `VITE_API_BASE_URL` | Optional REST API base URL (reserved for a future non-Supabase backend). | No. |
-| `VITE_API_TIMEOUT_MS` | REST API timeout in ms. Default 15000. | No. |
-| `VITE_ENABLE_NOTIFICATIONS` | Feature flag. Default false. | No. |
-| `VITE_ENABLE_BULK_UPLOAD` | Feature flag. Default false. | No. |
-| `VITE_ENABLE_PDF_EXPORT` | Feature flag. Default false. | No. |
+| `/` | redirects to `/login` | none |
+| `/login` | `LoginPage` | `AuthRoute` (redirects to `/dashboard` if already signed in) |
+| `/signup` | `SignupPage` | `AuthRoute` |
+| `/forgot-password` | `ForgotPasswordPage` | public |
+| `/reset-password` | `ResetPasswordPage` | public |
+| `/dashboard` | `DashboardPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/inventory` | `InventoryPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/sales` | `SalesPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/customers` | `CustomersPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/vendors` | `VendorsPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/expenses` | `ExpensesPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/reports` | `ReportsPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/settings` | `SettingsPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `/documents` | `DocumentsPage` | `ProtectedRoute` + `BusinessReadyGate` |
+| `*` | `NotFoundPage` | none |
 
-**Security invariant:** the frontend must never receive the Supabase
-`service_role` key. The publishable (anon) key is safe to ship to the browser
-ONLY when every tenant-scoped table has RLS enabled and policies that filter
-rows by `business_id` via the `current_user_sw_business_ids()` helper. Without
-RLS, the anon key exposes all data.
+`ProtectedRoute` wraps children in `BusinessProvider` and shows a loader
+while `BusinessProvider` is resolving the active business. `BusinessReadyGate`
+additionally shows a "Business setup error" screen if provisioning fails.
 
-### B.2 Supabase client
+Every lazy-loaded page is wrapped in an `ErrorBoundary` so a runtime crash in
+one page does not blank out the whole app.
 
-Location: `src/lib/supabase.js`. The client is a singleton constructed once at
-module import. Configuration:
+---
 
-- `persistSession: true` — the user's auth session is stored in localStorage
-  so refresh does not log them out.
-- `autoRefreshToken: true` — the access token is refreshed before it expires.
-- `detectSessionInUrl: true` — a stored session is restored on startup (this
-  is what makes the email-reset-link flow work).
+## 2. Operating modes
 
-When either `VITE_SUPABASE_URL` or `VITE_SUPABASE_PUBLISHABLE_KEY` is missing,
-the singleton is `null` and the entire app falls back to a clearly-labelled
-demo mode (see `src/components/common/DemoModeBanner.jsx`).
+The frontend has two operating modes, selected at module import time.
 
-### B.3 Service layer switch-point
+### 2.1 Demo mode (default)
 
-Location: `src/services/index.js`. The single switch-point is:
+Triggered when either `VITE_SUPABASE_URL` or `VITE_SUPABASE_PUBLISHABLE_KEY`
+is empty. In this mode:
+
+- The Supabase client singleton in `src/lib/supabase.js` is `null`.
+- The service layer in `src/services/index.js` selects the mock variant
+  for every domain.
+- `AuthProvider` accepts any email + password and persists a clearly
+  labelled demo user to `localStorage` under the key
+  `stockwise.demoUser`. This is a development convenience, not a
+  parallel auth system.
+- `BusinessProvider` synthesises an `activeBusinessId = 'demo-business'`
+  sentinel.
+- The `DemoModeBanner` component renders at the top of every page so
+  the user is not misled into thinking data is real.
+
+In demo mode, **no network calls are made** — the app is fully offline.
+
+### 2.2 Supabase mode
+
+Triggered when both `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`
+are present in the build environment. In this mode:
+
+- The Supabase client singleton is constructed once with
+  `{ persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }`.
+- The service layer selects the `*Supabase.js` variants.
+- `AuthProvider` delegates to Supabase Auth (`signInWithPassword`,
+  `signUp`, `signOut`, `getSession`, `onAuthStateChange`).
+- `BusinessProvider` calls `businessesService.listMyBusinesses()` and, if
+  the user has zero businesses, calls `businessesService.createBusiness()`
+  to provision one.
+- The `DemoModeBanner` does NOT render.
+
+### 2.3 Mode detection
+
+The single detection point is `isSupabaseConfigured` in `src/lib/env.js`:
 
 ```js
-export const inventoryService = isSupabaseConfigured ? inventorySupabase : inventoryMock;
+export const isSupabaseConfigured =
+  SUPABASE_URL.length > 0 && SUPABASE_PUBLISHABLE_KEY.length > 0;
 ```
 
-…applied per domain. The mock and Supabase variants expose the same function
-signatures and the same `{ data, error, pagination }` return shape, so page
-components are agnostic to which mode is active.
+`src/services/index.js` consumes this flag at import time and selects the
+active service variant per domain. Page components are agnostic to which
+mode is active.
 
-The frontend calls into this service layer — it does not call the Supabase
-client directly from page components. The single entry point per domain keeps
-the backend contract in one place.
+---
 
-### B.4 Authentication integration
+## 3. Frontend service layer
 
-`src/context/AuthContext.jsx` is dual-mode:
+### 3.1 Pattern
 
-- **Supabase mode** uses `supabase.auth.getSession()` to restore the session,
-  `onAuthStateChange` for cross-tab updates, and `signInWithPassword` /
-  `signUp` / `signOut` for the three auth actions.
-- **Demo mode** accepts any email + password and persists a clearly-labelled
-  demo user to localStorage. This is a development convenience, NOT a
-  parallel auth system.
+Each domain (inventory, sales, customers, vendors, expenses, dashboard,
+reports, businesses) has two service modules:
 
-Frontend auth flow expectations:
+- `src/services/<domain>Mock.js` — in-memory implementation used in demo
+  mode. Mutations do not persist across a page reload.
+- `src/services/<domain>Supabase.js` — Supabase-backed implementation used
+  in Supabase mode. Reads and writes go through the Supabase JS client.
 
-1. `signUp({ email, password, options: { data: { firstName, lastName, businessName } } })`
-   — `firstName`, `lastName`, `businessName` are stored in `user_metadata`.
-   These are read by `BusinessProvider` on first login to auto-provision the
-   user's first business (see Section C).
-2. `signInWithPassword({ email, password })` — standard email + password.
-3. `resetPasswordForEmail(email, { redirectTo: \`${VITE_PUBLIC_APP_URL}/reset-password\` })`
-   — the redirect target MUST be in the Supabase dashboard's "Redirect URLs"
-   list (Auth → URL Configuration → Redirect URLs). The `/reset-password`
-   route is implemented in `src/pages/auth/ResetPasswordPage.jsx`.
-4. Phone/OTP, OAuth (Google/GitHub), and magic-link flows are not implemented
-   in the frontend; they would require additional UI. The Supabase project
-   may enable them later — the frontend would not break.
+`src/services/index.js` is the single switch-point. Page components import
+from `src/services` (not directly from a variant), so the active mode is
+encapsulated.
 
-### B.5 Active-business provisioning
-
-`src/context/BusinessContext.jsx` wraps every protected route. On mount:
-
-1. Calls `businessesService.listMyBusinesses()`.
-2. If the user has ≥1 business, the first one becomes `activeBusinessId`.
-3. If the user has zero businesses, calls
-   `businessesService.createBusiness({ name, type, currency, timezone })`
-   using the values from `user_metadata` (set during signup), then
-   re-fetches the list. StrictMode double-mount is guarded with a
-   `provisioningRef` so a single signup does not create duplicate
-   businesses.
-
-`useBusiness()` returns `{ activeBusinessId, businesses, isBusinessLoading,
-businessError, switchBusiness, isDemoMode }`. Pages read `activeBusinessId`
-and pass it as `businessId` in service payloads, but **the server is the
-security boundary**: the client cannot trust the supplied `business_id`, and
-every RLS policy must filter by `auth.uid()` via the `sw_business_memberships`
-join.
-
-### B.6 Response shape contract
+### 3.2 Return-shape contract
 
 Every service function returns `{ data, error, pagination }`:
 
 - `data` — the shaped result row(s), or `null` on error.
-- `error` — `{ code, message }` or `null`. `code` is the PostgREST error code
-  for Supabase calls (e.g. `'P0001'` for a raised exception, `'23505'` for a
-  unique violation) or a frontend-defined sentinel (`'NOT_CONFIGURED'`,
-  `'NOT_FOUND'`).
-- `pagination` — `{ page, pageSize, total, totalPages }` for `list()` calls;
-  `null` for single-record calls.
+- `error` — `{ code, message }` or `null`. `code` is the PostgREST error
+  code for Supabase calls (e.g. `'P0001'` for a raised exception,
+  `'23505'` for a unique violation) or a frontend-defined sentinel
+  (`'NOT_CONFIGURED'`, `'NOT_FOUND'`).
+- `pagination` — `{ page, pageSize, total, totalPages }` for `list()`
+  calls; `null` for single-record calls.
 
-The frontend does NOT throw on Supabase errors. It checks `error` and renders
-an `ErrorState` component. Backend code should raise `RAISE EXCEPTION '...'
-USING ERRCODE = '...'` to surface meaningful error codes — these propagate
-through PostgREST as `error.code` and `error.message`.
+The frontend does NOT throw on Supabase errors. It checks `error` and
+renders an `ErrorState` component (see `src/components/common/ResourceState.jsx`).
 
-### B.7 Pagination, filtering, sorting, search
+### 3.3 List-function parameters
 
 Service `list()` calls accept a uniform options object:
 
 ```js
 {
-  search:    string,       // case-insensitive ilike against name/email/etc.
+  search:    string,        // case-insensitive ilike on name/sku/etc.
   status:    string | 'All',
   category:  string | 'All',
   payment:   string | 'All',
   type:      string | 'All',
   sort:      '<field>:asc' | '<field>:desc',
-  page:      number,        // 1-indexed
-  pageSize:  number,        // default 100
-  businessId: string,       // informational only — RLS enforces isolation
+  page:      number,         // 1-indexed
+  pageSize:  number,         // default 100
+  businessId: string,        // informational; isolation is enforced server-side
 }
 ```
 
-The Supabase query maps these to `.ilike()`, `.eq()`, `.order()`, `.range()`.
-The backend does not need to expose anything beyond standard PostgREST query
-support — Supabase handles the translation.
+The frontend passes `businessId` from `useBusiness()` so server-side code
+can use it if desired. The frontend treats the server as the security
+boundary — the client cannot trust the supplied `business_id`.
 
 ---
 
-## C. Required backend capabilities
+## 4. Frontend API integration points
 
-For each operation: (1) the feature/screen using it, (2) the required behaviour,
-(3) the existing endpoint/method if verified, (4) the request payload shape,
-(5) the response shape, (6) auth/permission requirements, (7) loading/error
-cases the frontend expects, (8) verification status.
+This section documents each Supabase-backed service module: the functions
+it exposes, what they call on the Supabase client, what payload shape they
+send, and what response shape they expect. The shape names referenced
+(e.g. `sw_inventory_items`) are the names the frontend literally queries
+via the Supabase JS client — they are observable in the source code. The
+backend developer should confirm that those names match their backend
+implementation.
 
-### C.1 Authentication
+Verification status legend:
 
-| Item | Detail |
-| --- | --- |
-| Feature | Login, Signup, Forgot Password, Reset Password screens. |
-| Required | Email + password auth; session persistence; password reset via email link; redirect URL must accept `${VITE_PUBLIC_APP_URL}/reset-password`. |
-| Endpoint | Supabase Auth (managed). No custom endpoint required. |
-| Payload (signup) | `{ email, password, options: { data: { firstName, lastName, businessName } } }` |
-| Response | `{ data: { session, user }, error }`. If email confirmation is required by the project, `data.session` is null and the frontend shows a "check your email" message. |
-| Auth | Public (signup) / public (signin) / authenticated (signout). |
-| Loading/error | The frontend shows a spinner during the 600ms+ round-trip and surfaces `error.message` in an alert box. |
-| Verification | Verified in dev Supabase project. |
+- **mock-tested** — the function is exercised by an automated test
+  against the mock variant (in `src/services/supabaseServices.test.js`).
+- **supabase-tested (prior)** — the function was tested against a live
+  Supabase project in an earlier development phase, but the test is not
+  part of the local automated suite (it required credentials).
+- **unverified** — the function is implemented but has not been tested
+  against a live backend in this code path.
+- **not implemented** — the function is a stub or returns hardcoded
+  values.
 
-### C.2 Business provisioning (auto-provisioned on first signup)
+### 4.1 Authentication — `src/context/AuthContext.jsx`
 
-| Item | Detail |
-| --- | --- |
-| Feature | `BusinessProvider` auto-provisions a business on first signup. |
-| Required | Insert a `sw_businesses` row + a `sw_business_memberships` row (role='owner') for the calling user, atomically. |
-| Endpoint | RPC `sw_create_business(p_name text, p_type text default 'retail', p_currency text default 'NGN', p_timezone text default 'Africa/Lagos') → jsonb`. |
-| Response | `{ business_id, name, type, currency, timezone, role }` |
-| Auth | Authenticated caller. The function must read `auth.uid()` and create the membership with that user as owner. |
-| Loading/error | Frontend shows `PageLoader` during provisioning. If it fails, the user lands on a "Business setup error" screen. |
-| Verification | Verified against dev project. |
+| Operation | Frontend call | Payload | Expected response | Verification |
+| --- | --- | --- | --- | --- |
+| Sign in | `supabase.auth.signInWithPassword({ email, password })` | email + password | `{ data: { session, user }, error }` | supabase-tested (prior) |
+| Sign up | `supabase.auth.signUp({ email, password, options: { data: { firstName, lastName, businessName } } })` | email + password + user_metadata | `{ data: { session, user }, error }` (session may be `null` if email confirmation is required) | supabase-tested (prior) |
+| Sign out | `supabase.auth.signOut()` | — | `{ error }` | supabase-tested (prior) |
+| Restore session | `supabase.auth.getSession()` | — | `{ data: { session }, error }` | supabase-tested (prior) |
+| Cross-tab sync | `supabase.auth.onAuthStateChange((event, session) => …)` | callback | `{ data: { subscription } }` | supabase-tested (prior) |
+| Password reset | `supabase.auth.resetPasswordForEmail(email, { redirectTo: \`${VITE_PUBLIC_APP_URL}/reset-password\` })` | email + redirect URL | `{ data, error }` | supabase-tested (prior) |
 
-### C.3 Inventory items CRUD
+The `redirectTo` value must be an entry in the Supabase project's "Redirect
+URLs" list for the reset email link to be accepted. The `/reset-password`
+route is implemented in `src/pages/auth/ResetPasswordPage.jsx`.
 
-| Item | Detail |
-| --- | --- |
-| Feature | Inventory page (`/inventory`): list, create, edit, delete, search, filter, sort. |
-| Required | Standard CRUD on `sw_inventory_items`, scoped to the caller's business via RLS. |
-| Endpoints | PostgREST on `sw_inventory_items` — `SELECT`, `INSERT`, `UPDATE`. Soft delete via `UPDATE deleted_at = now()`. |
-| Payload (create) | `{ business_id, name, sku, category, supplier_id?, stock, threshold, cost_price, selling_price, last_restocked }` |
-| Response (shaped) | `{ id, name, sku, category, supplier, stock, threshold, costPrice, sellingPrice, lastRestocked, iconName, bg, createdAt, updatedAt }` |
-| Auth | Authenticated + member of the business_id in the payload. RLS check `business_id IN current_user_sw_business_ids()`. |
-| Loading/error | `LoadingState` while fetching, `ErrorState` with retry on error. |
-| Verification | Verified against dev project. |
+The `user_metadata` shape the frontend reads (set during signup via the
+`data` option above) is `{ firstName, lastName, businessName }`.
+`BusinessProvider` reads these on first login to auto-provision a business.
 
-### C.4 Atomic sale creation
+### 4.2 Businesses — `src/services/businessesSupabase.js`
 
-| Item | Detail |
-| --- | --- |
-| Feature | New Sale modal (`/sales` → "New Sale" button). |
-| Required | Atomically: validate each line item's existence + stock, decrement stock, insert `sw_sales` + `sw_sale_items`, write `sw_stock_movements` rows (kind='sale'), generate `display_id` via `next_display_id()`. Reject on insufficient stock — the whole sale rolls back. Server computes `total` from line items. |
-| Endpoint | RPC `sw_create_sale(p_payload jsonb) → jsonb`. |
-| Payload | `{ business_id, customer_id | null, payment: 'Cash' \| 'Transfer' \| 'Card', status: 'completed' \| 'pending', note, items: [{ item_id, qty, unit_price }] }` |
-| Response | `{ sale_id, display_id, total }` |
-| Auth | Authenticated + member of `business_id`. The function must: (a) validate the customer_id (if non-null) belongs to the same business; (b) validate each item_id belongs to the same business; (c) validate each item has `stock >= qty` (reject with a clear error code if not); (d) wrap everything in a single transaction. |
-| Loading/error | Spinner during the call. On error, the modal stays open and the error message is surfaced. |
-| Verification | Verified against dev project — atomic rollback on insufficient stock confirmed. |
+| Function | Frontend call | Payload | Expected response | Verification |
+| --- | --- | --- | --- | --- |
+| `listMyBusinesses()` | `supabase.from('sw_business_memberships').select('…, sw_businesses(*)').eq('user_id', auth.uid())` | — | Array of `{ id, name, type, currency, timezone, role, createdAt }` | supabase-tested (prior) |
+| `createBusiness({ name, type, currency, timezone })` | `supabase.rpc('sw_create_business', { p_name, p_type, p_currency, p_timezone })` | RPC args | `{ business_id, name, type, currency, timezone, role }` | supabase-tested (prior) |
+| `getMyFirstBusinessId()` | wraps `listMyBusinesses()` | — | UUID or `null` | supabase-tested (prior) |
 
-> **CRITICAL — payment-method terminology.** The DB CHECK constraint is
-> `payment IN ('Cash', 'Transfer', 'Card')`. The frontend uses `'Card'` as
-> the value (the user-facing label is `"Card / POS"`). A `'POS'` value is
-> no longer sent by the frontend — earlier code sent `'POS'` and broke sale
-> creation. The backend must reject `'POS'` with a CHECK constraint or RPC
-> validation; it does, per migration 0002.
+**Integration assumption requiring confirmation:** The frontend assumes the
+`sw_create_business` RPC accepts `(p_name text, p_type text, p_currency
+text, p_timezone text)` and returns a JSON object containing at least
+`business_id`, `name`, `type`, `currency`, `timezone`, and `role`. The
+backend developer should confirm or renegotiate this signature.
 
-### C.5 Stock adjustment
+### 4.3 Inventory — `src/services/inventorySupabase.js`
 
-| Item | Detail |
-| --- | --- |
-| Feature | Manual stock adjustments (currently used by the inventory service — no dedicated UI yet). |
-| Required | Atomically: update `sw_inventory_items.stock`, write a `sw_stock_movements` row (kind='adjustment'), prevent stock from going negative. |
-| Endpoint | RPC `sw_adjust_stock(p_business_id uuid, p_item_id uuid, p_delta integer, p_note text?) → jsonb`. |
-| Auth | Authenticated + member of `p_business_id`. |
-| Verification | Verified against dev project. |
+| Function | Frontend call | Payload | Expected response | Verification |
+| --- | --- | --- | --- | --- |
+| `list({ search, category, status, sort, page, pageSize })` | `supabase.from('sw_inventory_items').select('*', { count: 'exact' }).is('deleted_at', null)` + filters | — | Array of shaped rows + pagination | mock-tested; supabase-tested (prior) |
+| `get(id)` | `supabase.from('sw_inventory_items').select('*').eq('id', id).maybeSingle()` | UUID | shaped row | mock-tested |
+| `create({ businessId, name, sku, category, supplierId?, stock, threshold, costPrice, sellingPrice, lastRestocked? })` | `supabase.from('sw_inventory_items').insert({ … }).select().single()` | row | shaped row | mock-tested |
+| `update(id, patch)` | `supabase.from('sw_inventory_items').update(dbPatch).eq('id', id).select().maybeSingle()` | UUID + patch | shaped row | mock-tested |
+| `remove(id)` | soft delete via `supabase.from('sw_inventory_items').update({ deleted_at: now() }).eq('id', id)` | UUID | `{ id }` | mock-tested |
+| `listCategories()` | hardcoded `['Clothing', 'Footwear', 'Accessories', 'Other']` | — | array | mock-tested |
+| `listSuppliers()` | `supabase.from('sw_vendors').select('name').is('deleted_at', null).order('name')` | — | array of vendor names | mock-tested |
+| `adjustStock(businessId, itemId, delta, note?)` | `supabase.rpc('sw_adjust_stock', { p_business_id, p_item_id, p_delta, p_note })` | RPC args | result object | mock-tested; supabase-tested (prior) |
 
-### C.6 Purchase order receiving
+The frontend's shaped row for an inventory item is:
+`{ id, name, sku, category, supplier, stock, threshold, costPrice,
+sellingPrice, lastRestocked, iconName, bg, createdAt, updatedAt }`.
+`iconName` and `bg` are presentation-only fields derived from `category`
+client-side — they are not stored server-side.
 
-| Item | Detail |
-| --- | --- |
-| Feature | Vendor drawer → "Receive" button on a pending PO. |
-| Required | Atomically: mark the PO `status='delivered'`, for each line item look up an inventory item by `(business_id, name)` — create one if missing — and increment its stock, write `sw_stock_movements` rows (kind='restock'). Idempotent on already-delivered POs (raise an error). Use `pg_advisory_xact_lock` to prevent concurrent double-receiving. |
-| Endpoint | RPC `sw_receive_purchase_order(p_purchase_order_id uuid) → jsonb`. |
-| Auth | Authenticated + member of the PO's business_id. |
-| Frontend behaviour | The frontend sends the PO's `display_id` (e.g. `PO-001`); the Supabase service in `vendorsSupabase.receivePurchaseOrder` resolves it to a UUID via a `select id from sw_purchase_orders where display_id = $1` lookup before calling the RPC. The RPC must accept a UUID. |
-| Loading/error | On error, an `alert()` is shown. (TODO: replace with a non-blocking toast.) |
-| Verification | **Requires confirmation** — the RPC is documented in the handover but the backend developer must verify it is applied to the dev project. |
+**Integration assumption requiring confirmation:** The frontend queries a
+table named `sw_inventory_items` and reads / writes the columns listed
+above (snake_case). It also calls an RPC named `sw_adjust_stock` with
+`(p_business_id uuid, p_item_id uuid, p_delta integer, p_note text?)`. The
+backend developer should confirm these names match their backend.
 
-### C.7 Customers / Vendors / Expenses CRUD
+### 4.4 Sales — `src/services/salesSupabase.js`
 
-These three domains follow the same pattern as inventory (Section C.3):
-PostgREST CRUD on the respective tables, soft delete via `deleted_at`, RLS
-filtering by `business_id`. No RPCs required.
+| Function | Frontend call | Payload | Expected response | Verification |
+| --- | --- | --- | --- | --- |
+| `list({ search, status, payment, page, pageSize })` | `supabase.from('sw_sales').select('*', { count: 'exact' }).is('deleted_at', null)` + filters | — | Array + pagination | mock-tested; supabase-tested (prior) |
+| `get(id)` | `supabase.from('sw_sales').select('*').eq('id', id).maybeSingle()` then fallback by `display_id` | UUID or display_id | shaped row | mock-tested |
+| `create({ businessId, customerId?, payment, status, note, items: [{ itemId, qty, unitPrice }] })` | `supabase.rpc('sw_create_sale', { p_payload: rpcPayload })` then `get(sale_id)` | RPC payload | `{ sale_id, display_id, total }` | mock-tested; supabase-tested (prior) |
+| `update(id, patch)` | `supabase.from('sw_sales').update(dbPatch).eq('id', id).select().maybeSingle()` | UUID + patch | shaped row | mock-tested |
+| `listPaymentMethods()` | hardcoded `['Cash', 'Transfer', 'Card']` | — | array | mock-tested |
 
-- Customers: `src/services/customersSupabase.js`. The `get()` function also
-  fetches up to 10 recent `sw_sales` rows for the customer (the join is
-  not performed in `list()` — see Section F).
-- Vendors: `src/services/vendorsSupabase.js`. `placeOrder()` inserts into
-  `sw_purchase_orders` + `sw_purchase_order_items`; it calls the
-  `next_display_id()` RPC for the `display_id`. The frontend passes the line
-  items as `newOrder.lineItems` (an array of `{ name, qty, unitPrice }`);
-  the count field `newOrder.items` (a number) is for display only.
-- Expenses: `src/services/expensesSupabase.js`. Direct CRUD on
-  `sw_expenses`. Categories and payment methods are hardcoded in the
-  service (no DB lookup needed).
+The RPC payload the frontend constructs for `sw_create_sale` is:
 
-### C.8 Dashboard aggregates
-
-The dashboard (`/dashboard`) calls five service functions, all of which perform
-client-side aggregation over `sw_inventory_items`, `sw_sales`, and
-`sw_sale_items`:
-
-| Function | Source tables | Notes |
-| --- | --- | --- |
-| `summary()` | `sw_inventory_items`, `sw_sales` | Returns 13 counts/totals; `salesChange`, `profitChange`, `inventoryChange`, `lowStockChange` are not computed (returned as 0) — period-over-period comparison is **unimplemented** in the service. |
-| `revenue()` | `sw_sales` | Groups by day-of-week for the last 2 weeks. |
-| `stockStatus()` | `sw_inventory_items` | Counts by derived status (in_stock / low_stock / out_of_stock). |
-| `topSellersList({ limit })` | `sw_sale_items` | Aggregates by `item_id`, returns top N. |
-| `pendingOrdersList({ limit })` | `sw_sales` | Where `status='pending'`. **Does NOT join `sw_sale_items`** — the returned `items` field is 0; the dashboard shows "0 items" for each pending order. |
-| `recentSalesList({ limit })` | `sw_sales` | Same — `items: []`. The dashboard shows "0 items" for recent sales too. |
-
-The "items count" gap is documented in Section F as an outstanding task. A
-server-side materialised view or a join in the service would resolve it.
-
-### C.9 Reports aggregates
-
-The reports page (`/reports`) calls four service functions
-(`salesReport`, `inventoryReport`, `customersReport`, `expensesReport`). All
-perform client-side aggregation. Several fields are returned as empty arrays
-or hardcoded zero values where the service does not yet compute them:
-
-- `salesReport.topProducts` — `[]` (not joined to inventory items by name).
-- `salesReport.paymentBreakdown` — `[]` (not grouped by `payment`).
-- `customersReport.acquisition` — `[]` (no month-by-month signup aggregation).
-- `customersReport.topCustomers` — `totalSpent: 0, totalOrders: 0` (no join
-  to `sw_sales` + `sw_sale_items`).
-
-The frontend renders fallback mock data for these empty fields today (per
-`src/pages/ReportsPage.jsx`). The mock fallback is NOT labelled as such on
-the page — this is a known honesty gap. Section F lists it as an
-outstanding task.
-
----
-
-## D. Data contract and database responsibilities
-
-The frontend expects the following database tables, columns, and constraints.
-The backend developer is responsible for implementing and verifying these. The
-SQL migrations that previously lived in this repository were removed as part of
-the frontend-only cleanup; the schema summary below is the authoritative
-contract.
-
-### D.1 Tables
-
-Every tenant-scoped table has: `id uuid primary key default gen_random_uuid()`,
-`business_id uuid not null references sw_businesses(id)`,
-`created_at timestamptz default now()`, `updated_at timestamptz default now()`,
-`deleted_at timestamptz` (soft delete). RLS is enabled on every table.
-
-| Table | Purpose | Key columns | Constraints |
-| --- | --- | --- | --- |
-| `sw_businesses` | Tenant root. | `name`, `type`, `currency`, `timezone` | `type IN ('retail','wholesale','ecommerce','distribution','manufacturing','other')`; `currency IN ('NGN','USD','EUR','GBP','GHS','KES')`. |
-| `sw_business_memberships` | User ↔ business join. | `business_id`, `user_id references auth.users(id)`, `role` | `role IN ('owner','admin','staff')`; `UNIQUE(business_id, user_id)`. |
-| `sw_customers` | Customer records. | `first_name`, `last_name`, `email?`, `phone`, `type`, `location`, `status`, `note?` | `type IN ('Retailer','Wholesale','Walk-in','E-commerce')`; `status IN ('active','new','owing','inactive')`. |
-| `sw_vendors` | Supplier records. | `name`, `contact_person`, `email?`, `phone`, `category`, `location`, `status`, `lead_time_days`, `rating`, `note?` | `category IN ('Clothing & Accessories','Footwear','Leather Goods','Accessories','Other')`; `status IN ('active','inactive')`; `lead_time_days >= 0`; `rating BETWEEN 1 AND 5`. |
-| `sw_inventory_items` | Stock items. | `name`, `sku`, `category`, `supplier_id? references sw_vendors(id)`, `stock`, `threshold`, `cost_price`, `selling_price`, `last_restocked?` | `category IN ('Clothing','Footwear','Accessories','Other')`; `stock >= 0`; `threshold >= 0`; `cost_price >= 0`; `selling_price >= 0`; `selling_price >= cost_price`. |
-| `sw_display_id_counters` | Atomic display_id generator. | `business_id`, `entity`, `next_value` | `entity IN ('sale','purchase_order')`; `PRIMARY KEY(business_id, entity)`. |
-| `sw_sales` | Sale headers. | `business_id`, `display_id`, `customer_id? references sw_customers(id)`, `payment`, `status`, `total`, `note?`, `sale_date` | `payment IN ('Cash','Transfer','Card')`; `status IN ('completed','pending','cancelled')`. |
-| `sw_sale_items` | Sale line items. | `sale_id references sw_sales(id) on delete cascade`, `item_id references sw_inventory_items(id)`, `qty`, `unit_price`, `line_total` | `qty > 0`; `unit_price >= 0`; `line_total` is a generated column `qty * unit_price`. |
-| `sw_purchase_orders` | PO headers. | `business_id`, `display_id`, `vendor_id references sw_vendors(id)`, `status`, `total`, `note?`, `order_date` | `status IN ('pending','delivered','cancelled')`. |
-| `sw_purchase_order_items` | PO line items. | `purchase_order_id references sw_purchase_orders(id) on delete cascade`, `item_name`, `qty`, `unit_price`, `line_total` | `qty > 0`; `unit_price >= 0`; `line_total` is a generated column. |
-| `sw_stock_movements` | Stock ledger. | `business_id`, `item_id references sw_inventory_items(id)`, `kind`, `qty`, `sale_id?`, `purchase_order_id?`, `note?`, `created_by references auth.users(id)` | `kind IN ('sale','restock','adjustment','return')`. |
-| `sw_expenses` | Expense records. | `business_id`, `name`, `category`, `vendor`, `amount`, `payment`, `expense_date`, `note?` | `category IN ('stock','rent','transport','utilities','marketing','salaries','packaging','other')`; `amount > 0`; `payment IN ('Cash','Transfer','Card')`. |
-| `sw_audit_log` | Audit trail (optional). | `business_id?`, `actor_user_id?`, `entity`, `entity_id?`, `action`, `payload_diff jsonb?` | `action IN ('insert','update','delete')`. |
-
-### D.2 Money
-
-All monetary amounts are `numeric(14, 2)` in the business's reporting
-currency (`sw_businesses.currency`, default `'NGN'`). Multi-currency
-conversion is out of scope for v1.
-
-### D.3 Display IDs
-
-`sw_sales.display_id` and `sw_purchase_orders.display_id` are
-human-friendly codes (e.g. `ORD-0001`, `PO-0001`) generated atomically by
-the `next_display_id(p_business_id uuid, p_entity text) → text` RPC. The RPC
-must:
-
-1. Lock the `(business_id, entity)` row in `sw_display_id_counters` (or
-   insert one if missing).
-2. Read `next_value`, format it with the entity prefix (`ORD-` or `PO-`),
-   increment `next_value`, return the formatted string.
-
-The frontend uses `display_id` for user-facing IDs and resolves to UUID
-where needed (see Section C.6 for the PO receiving flow).
-
-### D.4 Required RPC functions
-
-All RPCs are `SECURITY DEFINER` with `set search_path = public, auth`. They
-must validate the caller is a member of the business in the payload before
-mutating.
-
-| Function | Signature | Returns |
-| --- | --- | --- |
-| `current_user_sw_business_ids()` | — | `SETOF uuid` — the caller's business IDs. |
-| `current_user_is_business_member(p_business_id uuid)` | — | `boolean`. |
-| `current_user_business_role(p_business_id uuid)` | — | `text` — `'owner' \| 'admin' \| 'staff' \| null`. |
-| `next_display_id(p_business_id uuid, p_entity text)` | — | `text` — formatted display ID. |
-| `sw_create_business(p_name text, p_type text default 'retail', p_currency text default 'NGN', p_timezone text default 'Africa/Lagos')` | — | `jsonb` — `{ business_id, name, type, currency, timezone, role }`. |
-| `sw_create_sale(p_payload jsonb)` | — | `jsonb` — `{ sale_id, display_id, total }`. |
-| `sw_adjust_stock(p_business_id uuid, p_item_id uuid, p_delta integer, p_note text?)` | — | `jsonb`. |
-| `sw_receive_purchase_order(p_purchase_order_id uuid)` | — | `jsonb`. |
-
-### D.5 RLS policies
-
-Every tenant-scoped table (`sw_customers`, `sw_vendors`, `sw_inventory_items`,
-`sw_sales`, `sw_sale_items`, `sw_purchase_orders`, `sw_purchase_order_items`,
-`sw_stock_movements`, `sw_expenses`) must have:
-
-- `FOR SELECT USING (business_id IN current_user_sw_business_ids())`
-- `FOR INSERT WITH CHECK (business_id IN current_user_sw_business_ids())`
-- `FOR UPDATE USING (business_id IN current_user_sw_business_ids()) WITH CHECK (business_id IN current_user_sw_business_ids())`
-- `FOR DELETE USING (business_id IN current_user_sw_business_ids())`
-
-And filter `deleted_at IS NULL` in the `USING` clause for soft-deleted
-tables.
-
-`sw_businesses` itself is scoped by membership in
-`sw_business_memberships`. `sw_business_memberships` is readable by the
-membership's user and writable (insert/update/delete) only by an existing
-`owner` or `admin` of the same business.
-
-### D.6 Manual RLS verification
-
-The frontend ships an automated test suite (Vitest + jsdom) that covers
-service-layer contract shape and the demo-mode code path. RLS isolation
-CANNOT be automated without a configured Supabase project + two test users
-in different businesses. The backend developer should manually verify:
-
-1. User A in Business A cannot `SELECT` rows from Business B's
-   `sw_inventory_items` / `sw_sales` / `sw_customers` / `sw_vendors` /
-   `sw_expenses` / `sw_purchase_orders` / `sw_stock_movements`.
-2. User A cannot `INSERT` a `sw_inventory_items` row with
-   `business_id = <Business B's UUID>`.
-3. `sw_create_sale` rejects an `item_id` from another business (whole
-   sale rolls back, no partial state).
-4. `sw_create_sale` rejects a `customer_id` from another business.
-5. `sw_create_sale` rejects when `qty > stock` (insufficient stock).
-6. Concurrent `sw_create_sale` calls for the same item do not produce
-   negative stock (`pg_advisory_xact_lock` on the item).
-7. `sw_receive_purchase_order` is idempotent — calling it twice on the
-   same PO raises on the second call.
-8. The `sw_display_id_counters` row is created on first sale / first PO
-   per business (atomic; no duplicate IDs under concurrent inserts).
-
----
-
-## E. Environment and local integration
-
-### E.1 Required frontend env vars (developer's `.env.local`)
-
-```bash
-VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=<anon-public-key>
-VITE_PUBLIC_APP_URL=http://localhost:5173
+```js
+{
+  business_id,
+  customer_id: customerId ?? null,
+  payment,                          // 'Cash' | 'Transfer' | 'Card'
+  status: status ?? 'completed',    // 'completed' | 'pending' | 'cancelled'
+  note: note ?? null,
+  items: items.map(i => ({
+    item_id: i.itemId ?? i.item_id,
+    qty: Number(i.qty),
+    unit_price: Number(i.unitPrice ?? i.unit_price),
+  })),
+}
 ```
 
-`.env.example` is committed and contains the full set with placeholder values
-and inline safety notes. `.env.test.local` is also committed (it overrides
-Supabase vars to empty strings so the test suite runs deterministically in
-demo mode).
+The frontend expects the response to contain `{ sale_id, display_id, total }`
+and re-fetches the full sale via `get(sale_id)` after the RPC returns.
 
-### E.2 Run the frontend locally
+**Frontend-side gap (known):** `list()` and `get()` do not currently join
+`sw_customers` or `sw_inventory_items`. As a result, the Sales page shows
+the customer name as `'Unknown'` and line-item names as `'Unknown item'`
+in Supabase mode. This is a frontend-side implementation gap; the backend
+developer should NOT assume the server is misconfigured. See Section 10.
+
+**Integration assumption requiring confirmation:** The frontend assumes
+`sw_create_sale` accepts a single JSON argument (`p_payload`) with the
+shape above, returns `{ sale_id, display_id, total }`, and atomically
+inserts the sale + decrements stock + writes ledger entries. The backend
+developer should confirm this contract and the atomicity expectation.
+
+### 4.5 Customers — `src/services/customersSupabase.js`
+
+Standard PostgREST CRUD on a table the frontend queries as
+`sw_customers`. The `get()` function also fetches up to 10 recent
+`sw_sales` rows for the customer (the join to line items is not performed;
+`orders[].items` is `0`). The `list()` function does not perform this
+join either.
+
+The frontend's shaped customer row is:
+`{ id, firstName, lastName, email, phone, type, location, status, note,
+joinDate, initials, color, textColor, totalSpent, totalOrders, lastOrder,
+orders }`. `initials`, `color`, `textColor` are presentation-only and
+derived client-side from the customer name. `totalSpent` and
+`totalOrders` are NOT computed by the Supabase service (returned as `0`).
+
+**Integration assumption requiring confirmation:** The frontend queries a
+table named `sw_customers` with snake_case columns matching the shaped
+row above. The `listTypes()` and `listStatuses()` calls return hardcoded
+lists (`['Retailer','Wholesale','Walk-in','E-commerce']` and
+`['Active','New','Owing','Inactive']` respectively). The backend developer
+should confirm whether these enumerations should be enforced server-side
+or remain frontend-only.
+
+### 4.6 Vendors — `src/services/vendorsSupabase.js`
+
+| Function | Frontend call | Payload | Expected response | Verification |
+| --- | --- | --- | --- | --- |
+| `list({ search, category, status, page, pageSize })` | `supabase.from('sw_vendors').select('*', { count: 'exact' }).is('deleted_at', null)` + filters | — | Array + pagination | mock-tested |
+| `get(id)` | `supabase.from('sw_vendors').select('*').eq('id', id).maybeSingle()` then fetches 10 recent POs | UUID | shaped row with `orders[]` | mock-tested |
+| `create({ businessId, name, contactPerson, email?, phone, category, location, status, leadTimeDays, rating, note? })` | `supabase.from('sw_vendors').insert({ … }).select().single()` | row | shaped row | mock-tested |
+| `update(id, patch)` | `supabase.from('sw_vendors').update(dbPatch).eq('id', id).select().maybeSingle()` | UUID + patch | shaped row | mock-tested |
+| `remove(id)` | soft delete | UUID | `{ id }` | mock-tested |
+| `placeOrder(vendorId, newOrder, total)` | 1. `supabase.from('sw_vendors').select('business_id').eq('id', vendorId).maybeSingle()` 2. `supabase.rpc('next_display_id', { p_business_id, p_entity: 'purchase_order' })` 3. `supabase.from('sw_purchase_orders').insert({ … }).select().single()` 4. `supabase.from('sw_purchase_order_items').insert(lineItems)` | — | PO header + line items | mock-tested; supabase-tested (prior) |
+| `receivePurchaseOrder(purchaseOrderId)` | resolves display_id → UUID if needed, then `supabase.rpc('sw_receive_purchase_order', { p_purchase_order_id: uuid })` | display_id or UUID | result object | mock-tested; **unverified** against live backend in this branch |
+
+The frontend sends the PO line items as `newOrder.lineItems` — an array
+of `{ name, qty, unitPrice }`. The `newOrder.items` field (a number, the
+count of items) is for display compatibility only; the Supabase service
+uses `Array.isArray(newOrder.lineItems)` to find the array.
+
+The `receivePurchaseOrder` function accepts either a UUID or a
+`display_id` (e.g. `PO-001`). If the input does not match the UUID
+regex, it looks up the UUID from `sw_purchase_orders.display_id` first,
+then calls the RPC. This is so the rest of the app can keep using the
+user-facing `display_id`.
+
+**Integration assumption requiring confirmation:** The frontend assumes an
+RPC named `sw_receive_purchase_order` exists that accepts a single UUID
+argument (`p_purchase_order_id`) and atomically marks the PO as delivered
++ increments inventory stock + writes stock-movement ledger entries. The
+backend developer should confirm this contract and the idempotency
+expectation (calling the RPC twice on the same PO should not double-
+increment stock).
+
+### 4.7 Expenses — `src/services/expensesSupabase.js`
+
+Standard PostgREST CRUD on a table the frontend queries as `sw_expenses`.
+No RPCs. Categories and payment methods are hardcoded in the service
+(`listCategories()` returns 8 expense categories; `listPaymentMethods()`
+returns `['Cash', 'Transfer', 'Card']`).
+
+The frontend's shaped expense row is:
+`{ id, name, category, vendor, amount, payment, date, note, createdAt,
+updatedAt }`. The `category` field on the shaped row is the category ID
+(e.g. `'rent'`); the page-level code in `src/pages/ExpensesPage.jsx`
+maps the ID to a display label via the hardcoded `staticCategories`
+list in `src/data/mockData.js`.
+
+**Integration assumption requiring confirmation:** The frontend queries a
+table named `sw_expenses` and writes `category` as one of `('stock',
+'rent', 'transport', 'utilities', 'marketing', 'salaries', 'packaging',
+'other')` and `payment` as one of `('Cash', 'Transfer', 'Card')`. The
+backend developer should confirm whether these enumerations should be
+enforced server-side.
+
+### 4.8 Dashboard aggregates — `src/services/dashboardSupabase.js`
+
+| Function | Frontend call | Notes | Verification |
+| --- | --- | --- | --- |
+| `summary()` | counts on `sw_inventory_items` + `sw_sales` | Returns 13 fields. Period-over-period deltas (`salesChange`, `profitChange`, `inventoryChange`, `lowStockChange`) are NOT computed — returned as 0. | mock-tested; **frontend-side gap** |
+| `revenue()` | groups by day-of-week for last 2 weeks on `sw_sales` | Returns `{ data: [{day, thisWeek, lastWeek}], total, lastTotal, growthPct }` | mock-tested |
+| `stockStatus()` | counts by derived status on `sw_inventory_items` | Returns counts for In Stock / Low Stock / Out of Stock | mock-tested |
+| `topSellersList({ limit })` | aggregates `sw_sale_items` by `item_id` | Returns top N items by qty | mock-tested |
+| `pendingOrdersList({ limit })` | `sw_sales` where `status='pending'` | **Does NOT join `sw_sale_items`** — the returned `items` field is `0`. | mock-tested; **frontend-side gap** |
+| `recentSalesList({ limit })` | recent `sw_sales` | Same — `items: []`. | mock-tested; **frontend-side gap** |
+
+### 4.9 Reports aggregates — `src/services/reportsSupabase.js`
+
+| Function | Frontend call | Notes | Verification |
+| --- | --- | --- | --- |
+| `salesReport()` | aggregates over `sw_sales` + `sw_sale_items` | `topProducts` and `paymentBreakdown` returned as `[]` (not computed). | mock-tested; **frontend-side gap** |
+| `inventoryReport()` | aggregates over `sw_inventory_items` | `categoryReport` and `lowStock` are computed; `topProducts` returned as `[]`. | mock-tested |
+| `customersReport()` | aggregates over `sw_customers` + `sw_sales` | `acquisition` returned as `[]`; `topCustomers` returned with `totalSpent: 0, totalOrders: 0` (no join to sales). | mock-tested; **frontend-side gap** |
+| `expensesReport()` | aggregates over `sw_expenses` | Computed. | mock-tested |
+
+The Reports page (`src/pages/ReportsPage.jsx`) silently falls back to
+mock data from `src/data/mockData.js` for the unimplemented aggregates
+(`topProducts`, `paymentBreakdown`, `acquisition`, `topCustomers`). The
+fallback is NOT labelled on the page. This is a known honesty gap and is
+listed in Section 10.
+
+---
+
+## 5. Environment variables
+
+The frontend reads these env vars (see `.env.example` and
+`src/lib/env.js`). All `VITE_*` variables are PUBLIC — they are inlined
+into the browser bundle at build time. Do NOT put secrets in a `VITE_*`
+variable.
+
+| Variable | Purpose | Required? |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | Supabase project URL. | Yes — without it, demo mode. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) key. | Yes — without it, demo mode. |
+| `VITE_PUBLIC_APP_URL` | Public-facing app URL; used as the password-reset `redirectTo`. | Yes for password-reset flow to land on `/reset-password`. |
+| `VITE_API_BASE_URL` | Optional REST API base URL. Reserved for a future non-Supabase backend; not currently consumed by any service module. | No. |
+| `VITE_API_TIMEOUT_MS` | REST API timeout in ms. Default 15000. Not currently consumed. | No. |
+| `VITE_ENABLE_NOTIFICATIONS` | Feature flag. Default false. Read by `envSummary` for inspection; no UI gated by it today. | No. |
+| `VITE_ENABLE_BULK_UPLOAD` | Feature flag. Default false. Same — reserved. | No. |
+| `VITE_ENABLE_PDF_EXPORT` | Feature flag. Default false. Same — reserved. | No. |
+
+`.env.local` is gitignored. `.env.example` is committed and documents every
+variable with inline safety notes. `.env.test.local` is committed and
+overrides Supabase vars to empty strings so the test suite runs
+deterministically in demo mode regardless of the developer's `.env.local`.
+
+The Supabase publishable (anon) key is designed to be public. The frontend
+never reads, stores, or transmits a Supabase `service_role` key — that key
+must not appear in any `VITE_*` variable or anywhere else in the frontend
+source.
+
+---
+
+## 6. Authentication integration
+
+`src/context/AuthContext.jsx` is the auth boundary. In Supabase mode it
+uses the Supabase JS client exclusively; in demo mode it accepts any
+credentials and persists a clearly-labelled demo user to `localStorage`.
+
+The frontend expects:
+
+1. `signUp` to accept `options.data` with `{ firstName, lastName,
+   businessName }` — these become `user.user_metadata` and are read by
+   `BusinessProvider` on first login.
+2. `signInWithPassword` to return a session that persists across refresh
+   (the frontend sets `persistSession: true`).
+3. `onAuthStateChange` to fire on token refresh, sign-out, and sign-in
+   from other tabs. The frontend uses this to keep its `user` state in
+   sync.
+4. `resetPasswordForEmail` to send an email with a link that includes a
+   recovery token; the link target is
+   `${VITE_PUBLIC_APP_URL}/reset-password`. The `/reset-password` route
+   is implemented in `src/pages/auth/ResetPasswordPage.jsx` and uses
+   `supabase.auth.getSession()` after a 1.5s delay to detect the
+   recovery token.
+
+The frontend does NOT implement phone/OTP, OAuth (Google/GitHub), or
+magic-link flows. The Supabase project may enable them later — the
+frontend would not break, but no UI is provided for them.
+
+---
+
+## 7. Active-business selection
+
+`src/context/BusinessContext.jsx` wraps every protected route. On mount
+in Supabase mode:
+
+1. Calls `businessesService.listMyBusinesses()`.
+2. If the user has ≥1 business, the first one becomes `activeBusinessId`.
+3. If the user has zero businesses, calls
+   `businessesService.createBusiness({ name, type, currency, timezone })`
+   using values from `user_metadata` (set during signup), then re-fetches
+   the list. A `provisioningRef` guards against React 19 StrictMode
+   double-mount so a single signup does not create duplicate businesses.
+
+`useBusiness()` returns `{ activeBusinessId, businesses,
+isBusinessLoading, businessError, switchBusiness, isDemoMode }`. Pages
+read `activeBusinessId` and pass it as `businessId` in service payloads.
+
+In demo mode, `BusinessProvider` synthesises an `activeBusinessId =
+'demo-business'` sentinel and a single demo business.
+
+**Integration assumption requiring confirmation:** The frontend assumes
+`listMyBusinesses()` returns rows shaped as
+`{ id, name, type, currency, timezone, role, createdAt }` and that
+`createBusiness()` returns
+`{ business_id, name, type, currency, timezone, role }`. The backend
+developer should confirm these shapes.
+
+---
+
+## 8. Verification status
+
+The frontend ships an automated test suite (Vitest + jsdom) of 39 tests
+across 7 files. These tests run in demo mode (Supabase env vars are
+overridden to empty strings by `.env.test.local`) — they do NOT exercise
+the Supabase code path against a live backend.
+
+| Test file | What it covers |
+| --- | --- |
+| `src/context/AuthContext.test.jsx` | `AuthProvider` reports demo mode when Supabase env vars are missing; demo user persists across `AuthProvider` remount. |
+| `src/context/BusinessContext.test.jsx` | `BusinessProvider` exposes the documented context shape in demo mode and does not crash without a user. |
+| `src/lib/supabase.test.js` | When env vars are missing, `isSupabaseConfigured` is `false`, `supabase` client is `null`, `envSummary` honestly reports demo mode. |
+| `src/components/common/ComingSoon.test.jsx` | `ComingSoon` placeholder renders title + description; "Back to Dashboard" button navigates to `/dashboard`. |
+| `src/components/sales/NewSaleModal.test.jsx` | The modal renders when `isOpen=true` and returns `null` when `isOpen=false` (Rules-of-Hooks regression check). |
+| `src/pages/InventoryPage.test.jsx` | `InventoryPage` renders a loading state, then renders inventory after the service loads. Does NOT silently fall back to mock data on service error. |
+| `src/services/supabaseServices.test.js` | Service-layer switch logic: `dataMode.isSupabase` is `false` in tests; dynamically imported Supabase service modules return `NOT_CONFIGURED` errors when the client is `null`. |
+
+### 8.1 What is verified
+
+- The frontend builds cleanly with `npm run build`.
+- The frontend lints cleanly with `npm run lint` (0 errors, 0 warnings).
+- The frontend's automated test suite passes (`npm test`, 39/39).
+- The demo-mode code path is exercised end-to-end: a user can sign in,
+  view every page, and interact with mock data without crashing.
+- The Supabase code path's "not configured" guard is verified (every
+  Supabase service module returns a `NOT_CONFIGURED` error when the
+  client is `null`).
+
+### 8.2 What is verified against a live backend (prior phases, not in this branch's automated suite)
+
+Several integration points were tested against a live Supabase project in
+earlier development phases. Those tests required credentials and are not
+part of the local automated suite. The verified flows were:
+
+- Sign-up + auto-provisioning of a business on first login.
+- Inventory CRUD.
+- Atomic sale creation (`sw_create_sale`) — including rejection on
+  insufficient stock and on cross-business `customer_id`.
+- Concurrent sale creation against the same item (no negative stock).
+- Purchase-order receiving (`sw_receive_purchase_order`) — after the RPC
+  was applied to the dev project.
+
+These results are not reproducible from the local test suite alone. To
+re-verify, the backend developer should run the equivalent flows against
+their own Supabase project.
+
+### 8.3 What is NOT verified in this branch
+
+- No automated test asserts the response shape of any Supabase RPC.
+- No automated test exercises the `sw_receive_purchase_order` flow against
+  a live backend in this branch.
+- No automated test exercises the dashboard's `summary()` / `revenue()`
+  / `stockStatus()` / `topSellersList()` functions against a live
+  backend.
+- No automated test exercises the reports page's `*Report()` functions
+  against a live backend.
+
+A successful `npm run build` does NOT prove live API integration. The
+Supabase code path is implemented and was exercised in earlier phases,
+but its current behaviour against a live backend is unverified in this
+branch's automated suite.
+
+---
+
+## 9. Frontend-side limitations
+
+The list below contains frontend-side implementation gaps and known
+limitations. These are NOT instructions to the backend developer — they
+describe what the frontend does today so the backend developer
+understands the integration surface they are inheriting.
+
+### 9.1 Placeholders
+
+- `/settings` renders `<ComingSoon title="Settings" />`. No profile
+  editing, business profile editing, password change, or session
+  revocation UI exists.
+- `/documents` renders `<ComingSoon title="Documents" />`. No list,
+  upload, or storage UI exists.
+
+### 9.2 Disabled controls (honest "Coming soon")
+
+- TopBar search input is `disabled` with placeholder
+  `"Search (coming soon)"`.
+- TopBar notifications bell renders an empty list; the "Mark all read"
+  and "View all notifications" links are non-clickable `<span>` elements.
+- Inventory page: "Bulk Upload" button is `disabled` with
+  `title="Coming soon — bulk upload is not yet implemented"`.
+- Inventory page: "Export" button is `disabled` with
+  `title="Coming soon — CSV export is not yet implemented"`.
+- Sales page: "Export" button is `disabled` (same).
+- Sales page: "Print" icon button in the desktop table has no `onClick`.
+- Customers page: "Import" button is `disabled` with
+  `title="Coming soon"`.
+- Vendors page: "Import" button is `disabled` with
+  `title="Coming soon"`.
+- Expenses page: "Export" button is `disabled` with
+  `title="Coming soon"`.
+- Reports page: "Export PDF" button is `disabled` with
+  `title="Coming soon — PDF export is not yet implemented"`.
+
+### 9.3 Frontend-side implementation gaps in Supabase mode
+
+These are gaps in the frontend's service layer — they are NOT caused by
+the backend. The backend developer should not assume the server is
+misconfigured because of these.
+
+- `dashboardSupabase.recentSalesList()` and `pendingOrdersList()` do not
+  join `sw_sale_items`. The dashboard shows "0 items" for every pending
+  order and recent sale in Supabase mode.
+- `dashboardSupabase.summary()` does not compute period-over-period
+  deltas (`salesChange`, `profitChange`, `inventoryChange`,
+  `lowStockChange` are 0). The dashboard's "vs last month" labels are
+  therefore misleading in Supabase mode.
+- `salesSupabase.list()` and `salesSupabase.get()` do not join
+  `sw_customers` or `sw_inventory_items`. The Sales page shows the
+  customer name as "Unknown" and line-item names as "Unknown item" in
+  Supabase mode.
+- `customersSupabase.get()` does not aggregate `totalSpent` /
+  `totalOrders` (returned as 0).
+- `customersSupabase.list()` returns `orders[i].items = 0` (no join to
+  line items).
+- `vendorsSupabase.get()` returns `orders[i].items = 0` (no join to
+  `sw_purchase_order_items`).
+- `reportsSupabase.salesReport()` returns `topProducts: []` and
+  `paymentBreakdown: []` (not computed). The Reports page silently
+  falls back to mock data for these.
+- `reportsSupabase.customersReport()` returns `acquisition: []` and
+  `topCustomers[i].totalSpent = 0, totalOrders = 0`. The Reports page
+  silently falls back to mock data for these.
+
+### 9.4 Mock-data leakage
+
+`src/data/mockData.js` is imported by 18 files: 7 mock service modules
+(expected) plus 11 page and component files that use its category / type
+/ status enumerations and avatar-color palettes for select dropdowns and
+icons. In Supabase mode these enumerations are not refetched from the
+backend — they remain frontend-defined. The Reports page and the
+Expenses page also use mock arrays as chart fallbacks when the Supabase
+service returns `null` or an empty result.
+
+### 9.5 No pagination UI
+
+Service `list()` functions default to `pageSize: 100` and accept `page` +
+`pageSize` parameters, but no list view exposes a pagination control. If
+a business has more than 100 records in any list, only the first 100 are
+visible.
+
+### 9.6 Hardcoded `alert()` calls
+
+Two call sites use the native `alert()` to surface errors:
+
+- `src/pages/VendorsPage.jsx` — PO receive failure.
+- `src/pages/auth/ForgotPasswordPage.jsx` — success message after the
+  reset link is sent.
+
+These are blocking native dialogs, not non-blocking toasts.
+
+### 9.7 Dashboard "Fulfil" button
+
+`src/pages/DashboardPage.jsx` `handleFulfil(id)` calls
+`salesService.update(id, { status: 'completed' })` and on success removes
+the order from local state. If the server call fails, the order remains
+in the list and the error is logged to the console (no UI feedback).
+
+---
+
+## 10. Installation, build, and verification
+
+### 10.1 Prerequisites
+
+- Node.js 18+ (the project uses native ESM + Vite 8).
+- npm 9+.
+
+### 10.2 Installation
 
 ```bash
 npm install
-npm run dev       # http://localhost:5173
-npm run build     # production bundle in dist/
-npm run lint      # ESLint
-npm test          # Vitest (39 tests, jsdom)
 ```
 
-### E.3 Test the frontend against the backend
+### 10.3 Environment configuration
 
-1. Apply the schema, RLS policies, and RPC functions to a dev Supabase
-   project (the SQL is documented in Section D — the backend developer
-   owns the migration files).
-2. Set the env vars in `.env.local`.
-3. Run `npm run dev`. The frontend should detect Supabase mode (the
-   `DemoModeBanner` will disappear).
-4. Sign up a test user; the `BusinessProvider` should auto-provision a
-   business.
-5. Walk through each page (Dashboard, Inventory, Sales, Customers,
-   Vendors, Expenses, Reports) and verify data flows.
+```bash
+cp .env.example .env.local
+# Edit .env.local — set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
+# (or leave them blank to run in demo mode).
+```
 
-### E.4 CORS and Supabase Auth configuration
+### 10.4 Run
 
-In the Supabase dashboard:
+```bash
+npm run dev       # → http://localhost:5173
+npm run build     # → dist/
+npm run preview   # serve the built bundle locally
+```
 
-- **Auth → URL Configuration → Site URL**: the production deployment URL
-  (e.g. `https://stockwise-rho.vercel.app`).
-- **Auth → URL Configuration → Redirect URLs**: must include
-  `http://localhost:5173/reset-password` (dev) and
-  `https://stockwise-rho.vercel.app/reset-password` (prod). Without these
-  entries, the password-reset email link will be rejected.
-- **Database → Connection string**: not used by the frontend. The frontend
-  uses the publishable anon key only.
+### 10.5 Lint and tests
 
-### E.5 Distinguishing a frontend defect from an unavailable backend
+```bash
+npm run lint             # ESLint (0 errors, 0 warnings at HEAD)
+npm test                 # Vitest single run (39 tests, 7 files)
+npm run test:watch       # Vitest watch mode
+npm run test:coverage    # Vitest with coverage report
+```
+
+There is no TypeScript type-check step — the project is plain JSX.
+
+### 10.6 Distinguishing a frontend defect from an unavailable backend
 
 | Symptom | Likely cause |
 | --- | --- |
 | Page renders but data is empty + "Demo mode" banner is shown. | Frontend is in demo mode (Supabase env vars missing). Not a backend issue. |
-| Page renders, "Demo mode" banner is NOT shown, but a specific table is empty. | Either no data exists for this business OR an RLS policy is rejecting the read. Check the Supabase logs. |
-| A create/update/delete fails with `error.code = 'P0001'`. | The RPC raised an exception (e.g. insufficient stock). Check the error message. |
+| Page renders, banner is NOT shown, but a specific table is empty. | Either no data exists for this business OR an RLS policy is rejecting the read. Check the Supabase logs. |
+| A create / update / delete fails with `error.code = 'P0001'`. | A server-side RPC raised an exception. Check the error message. |
 | A create fails with `error.code = '42501'`. | RLS denied the write. Verify the user is a member of the `business_id` in the payload. |
 | `error.code = 'NOT_CONFIGURED'`. | The Supabase client is `null` (env vars missing). Not a backend issue. |
 | `error.code = 'NOT_FOUND'`. | The frontend looked up an ID that does not exist (or is in another business). |
 
 ---
 
-## F. Outstanding integration tasks
+## 11. Integration assumptions requiring confirmation
 
-The list below contains only items supported by the audit. Each is tied to a
-frontend feature and a verification status.
+The frontend makes the assumptions below. The backend developer should
+confirm or renegotiate each before relying on it. None of these are
+instructions to implement the backend in a particular way — they are the
+observable contract the frontend currently depends on.
 
-| # | Required action | Reason | Frontend feature | Acceptance condition | Status |
-| --- | --- | --- | --- | --- | --- |
-| F-1 | Apply the schema, RLS policies, and RPC functions to the dev and prod Supabase projects. | Without these, the frontend runs in demo mode and no data persists. | All authenticated pages. | All `sw_*` tables exist; RLS is enabled on every tenant-scoped table; all four RPCs (`sw_create_business`, `sw_create_sale`, `sw_adjust_stock`, `sw_receive_purchase_order`) respond. | **Requires confirmation** — backend developer must apply. |
-| F-2 | Implement a join from `sw_sales` to `sw_sale_items` in `dashboardSupabase.recentSalesList` and `pendingOrdersList`. | Today the dashboard shows "0 items" for every pending order and recent sale. | Dashboard pending-orders + recent-sales sections. | Each pending-order and recent-sale row shows the actual line-item count. | Verified as a known gap; fix is localised to `src/services/dashboardSupabase.js`. |
-| F-3 | Implement a join from `sw_sales` to `sw_customers` in `salesSupabase.list` and `salesSupabase.get`. | Today the Sales page shows "Unknown" as the customer name in Supabase mode. | Sales list + sale detail. | Each sale row shows the customer's real name. | Verified as a known gap. |
-| F-4 | Implement a join from `sw_sale_items` to `sw_inventory_items` for the `name` field. | Today line-item names show as "Unknown item". | Sales list + sale detail line items. | Each line item shows the inventory item's name. | Verified as a known gap. |
-| F-5 | Compute `salesChange`, `profitChange`, `inventoryChange`, `lowStockChange` in `dashboardSupabase.summary`. | Today the dashboard's "vs last month" deltas are always 0. | Dashboard StatCard `change` prop. | StatCards show non-zero deltas when historical data exists. | Verified as a known gap. |
-| F-6 | Compute `topProducts`, `paymentBreakdown`, `acquisition`, and `topCustomers` aggregates in `reportsSupabase.*Report`. | Today the Reports page falls back to mock data for these sections (silently). | Reports page sales / customers / expenses tabs. | Reports render real data, not mock fallback. | Verified as a known gap. |
-| F-7 | Implement the Settings page (profile editing, business profile editing, password change, session revocation). | The page is a placeholder today. | `/settings`. | User can edit their profile + business + password. | Unimplemented. |
-| F-8 | Implement the Documents page (list of generated documents, document upload, per-business storage bucket). | The page is a placeholder today. | `/documents`. | User can view and upload documents. | Unimplemented. |
-| F-9 | Implement the TopBar search (across inventory, customers, vendors, sales). | Today the search input is disabled. | TopBar search. | User can search across entities and click through to results. | Unimplemented. |
-| F-10 | Implement the TopBar notifications centre (low-stock alerts, pending orders, etc.). | Today the bell is empty. | TopBar notifications. | User sees real alerts based on inventory state. | Unimplemented. |
-| F-11 | Implement CSV export on Inventory, Sales, and Expenses pages. | Today the export buttons are disabled. | Per-page export buttons. | User can export the filtered list to CSV. | Unimplemented. |
-| F-12 | Implement PDF export on the Reports page. | Today the "Export PDF" button is disabled. | Reports page. | User can download a PDF of the active report. | Unimplemented. |
-| F-13 | Implement bulk upload on the Inventory page. | Today the "Bulk Upload" button is disabled. | Inventory page. | User can upload a CSV of inventory items. | Unimplemented. |
-| F-14 | Implement pagination on the list views. | Today the service `list()` functions default to `pageSize: 100` with no UI to advance pages. | Inventory, Sales, Customers, Vendors, Expenses list views. | User can paginate through >100 records. | Unimplemented. |
-| F-15 | Replace `alert()` in `VendorsPage.handleReceive` with a non-blocking toast. | UX polish. | Vendor drawer → Receive PO. | Errors surface in a toast, not a native blocking alert. | Verified as a known gap. |
-| F-16 | Replace `alert()` in the password-reset success state with a non-blocking banner. | UX polish. | Forgot Password page. | Same. | Verified as a known gap. |
+| # | Assumption | Where in the frontend |
+| --- | --- | --- |
+| 1 | The Supabase JS client v2.118 is the integration transport. | `package.json`, `src/lib/supabase.js` |
+| 2 | The publishable (anon) key is safe to ship to the browser. | `.env.example`, `src/lib/supabase.js` |
+| 3 | `signUp` accepts `options.data` with `{ firstName, lastName, businessName }` and these are stored in `user.user_metadata`. | `src/context/AuthContext.jsx` |
+| 4 | `resetPasswordForEmail` accepts a `redirectTo` option and the resulting email link is accepted if the value is in the project's "Redirect URLs" list. | `src/pages/auth/ForgotPasswordPage.jsx` |
+| 5 | `listMyBusinesses()` returns rows shaped `{ id, name, type, currency, timezone, role, createdAt }`. | `src/services/businessesSupabase.js` |
+| 6 | `sw_create_business` accepts `(p_name, p_type, p_currency, p_timezone)` and returns `{ business_id, name, type, currency, timezone, role }`. | `src/services/businessesSupabase.js` |
+| 7 | `sw_create_sale` accepts a single JSON argument `p_payload` with the shape documented in Section 4.4 and returns `{ sale_id, display_id, total }`. The RPC atomically inserts the sale + line items + decrements stock + writes ledger entries; on failure the whole sale rolls back. | `src/services/salesSupabase.js` |
+| 8 | `sw_adjust_stock` accepts `(p_business_id, p_item_id, p_delta, p_note)` and atomically updates stock + writes a stock-movement ledger entry. | `src/services/inventorySupabase.js` |
+| 9 | `sw_receive_purchase_order` accepts a single UUID `p_purchase_order_id` and atomically marks the PO as delivered + increments inventory stock + writes stock-movement ledger entries. Calling it twice on the same PO does not double-increment stock. | `src/services/vendorsSupabase.js` |
+| 10 | `next_display_id` accepts `(p_business_id, p_entity)` and returns a string formatted display ID (e.g. `ORD-0001`, `PO-0001`). | `src/services/vendorsSupabase.js` |
+| 11 | The frontend queries tables named `sw_businesses`, `sw_business_memberships`, `sw_customers`, `sw_vendors`, `sw_inventory_items`, `sw_sales`, `sw_sale_items`, `sw_purchase_orders`, `sw_purchase_order_items`, `sw_stock_movements`, `sw_expenses`. (The `sw_audit_log` and `sw_display_id_counters` names appear in earlier audit docs only — they are not queried by current frontend code in this branch.) | `src/services/*Supabase.js` |
+| 12 | The `payment` field on `sw_sales` and `sw_expenses` accepts `'Cash'`, `'Transfer'`, or `'Card'`. The frontend standardised on `'Card'` (the user-facing label is `"Card / POS"`). The frontend no longer sends `'POS'`. | `src/components/sales/NewSaleModal.jsx`, `src/components/sales/ViewOrderModal.jsx`, `src/pages/SalesPage.jsx`, `src/data/mockData.js` |
+| 13 | The `category` field on `sw_inventory_items` accepts `'Clothing'`, `'Footwear'`, `'Accessories'`, or `'Other'`. The `category` field on `sw_vendors` accepts `'Clothing & Accessories'`, `'Footwear'`, `'Leather Goods'`, `'Accessories'`, or `'Other'`. The `category` field on `sw_expenses` accepts `'stock'`, `'rent'`, `'transport'`, `'utilities'`, `'marketing'`, `'salaries'`, `'packaging'`, or `'other'`. | `src/services/*Supabase.js`, `src/data/mockData.js` |
+| 14 | The `status` field on `sw_sales` accepts `'completed'`, `'pending'`, `'cancelled'`. The `status` field on `sw_purchase_orders` accepts `'pending'`, `'delivered'`, `'cancelled'`. The `status` field on `sw_customers` accepts `'active'`, `'new'`, `'owing'`, `'inactive'`. | `src/services/*Supabase.js`, `src/data/mockData.js` |
+| 15 | Money is stored as `numeric(14, 2)` in the business's reporting currency. The frontend does not perform currency conversion. | `src/services/*Supabase.js` (no conversion logic present) |
 
----
-
-## G. Integration acceptance criteria
-
-The backend handover is complete when:
-
-- [ ] All `sw_*` tables from Section D.1 exist on the dev Supabase project
-      with the documented columns and constraints.
-- [ ] RLS is enabled on every tenant-scoped table; the policies from
-      Section D.5 are applied.
-- [ ] All four SECURITY DEFINER RPC functions respond:
-      `sw_create_business`, `sw_create_sale`, `sw_adjust_stock`,
-      `sw_receive_purchase_order`.
-- [ ] The `next_display_id` helper RPC responds and produces unique
-      sequential IDs per business per entity.
-- [ ] A user signing up via the frontend is auto-provisioned a business;
-      `sw_businesses` and `sw_business_memberships` rows exist for them.
-- [ ] A user can CRUD inventory items, customers, vendors, expenses — and
-      those records are scoped to their business (a second user in a
-      different business cannot read or write them).
-- [ ] A user can create a sale via the New Sale modal; stock decrements
-      atomically; the sale appears in the Sales list; the dashboard's
-      pending-orders count updates.
-- [ ] A sale with `qty > stock` is rejected; no partial state is left
-      behind.
-- [ ] A user can place a purchase order via the Vendor drawer; line items
-      are persisted in `sw_purchase_order_items`; the PO appears in the
-      vendor's recent-orders list.
-- [ ] A user can receive a PO via the Vendor drawer; stock increments
-      atomically; the PO's status changes to `delivered`; the dashboard's
-      inventory count updates.
-- [ ] Password reset flow works end-to-end: the user enters their email,
-      receives a link, lands on `/reset-password`, and can set a new
-      password.
-- [ ] The frontend's `error.code` surface shows meaningful PostgREST
-      codes for validation failures (P0001), unique violations (23505),
-      and RLS denials (42501).
-- [ ] The frontend builds, lints, and tests pass:
-      `npm run build && npm run lint && npm test` all exit 0.
+The backend developer is free to design the database, RLS, and
+server-side business logic however they see fit — the only requirement is
+that the observable API contract the frontend depends on (the function
+names, the table names, the field names, the JSON payload shapes, and the
+response shapes listed above) is satisfied or renegotiated with the
+frontend developer.
