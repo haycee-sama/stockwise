@@ -9,8 +9,8 @@
 //      contract: `{ data: null, error: { code, message } }`.
 //
 // Tests that require a REAL Supabase connection (e.g. actually
-// creating a sale and verifying stock decremented atomically) live
-// in supabase/migrations/RLS_VERIFICATION.md as a manual verification
+// creating a sale and verifying stock decremented atomically) are
+// documented in docs/BACKEND_HANDOVER.md as a manual verification
 // procedure. They cannot be automated without a configured test
 // Supabase project + service-role key, which is out of scope for
 // the local test runner.

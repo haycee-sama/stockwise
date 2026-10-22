@@ -1,8 +1,7 @@
 // src/services/salesSupabase.js
 // Supabase-backed implementation of the sales service. The crucial
 // difference from the mock: sale creation is ATOMIC via the
-// `sw_create_sale` SECURITY DEFINER RPC function (defined in
-// supabase/migrations/0002_rls_policies_and_functions.sql).
+// `sw_create_sale` SECURITY DEFINER RPC function (see docs/BACKEND_HANDOVER.md).
 //
 // This means:
 // - Stock decrements + sale_items + stock_movements are all written

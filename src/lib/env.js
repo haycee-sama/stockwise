@@ -2,7 +2,7 @@
 // Centralised, typed access to Vite env vars.
 // All VITE_* env vars are PUBLIC — they are shipped to the browser bundle.
 // NEVER put secrets (DB passwords, service-role keys, OAuth secrets) in a VITE_ var.
-// See docs/ENVIRONMENT_SETUP.md §6 for safe-development practices.
+// See .env.example and docs/BACKEND_HANDOVER.md for safe-development practices.
 
 function getEnv(name, fallback = '') {
   // import.meta.env is replaced at build time by Vite.
@@ -20,7 +20,7 @@ function getBoolEnv(name, fallback = false) {
 // Supabase public configuration. The publishable key (anon key) is
 // DESIGNED to be public — it is safe to expose in the browser bundle,
 // as long as Row Level Security is enabled on every table. NEVER put
-// the service_role key here. See docs/SUPABASE_SETUP.md.
+// the service_role key here. See docs/BACKEND_HANDOVER.md.
 export const SUPABASE_URL = getEnv('VITE_SUPABASE_URL', '');
 export const SUPABASE_PUBLISHABLE_KEY = getEnv('VITE_SUPABASE_PUBLISHABLE_KEY', '');
 

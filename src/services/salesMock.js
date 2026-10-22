@@ -1,6 +1,6 @@
 // src/services/salesMock.js
 // Mock data-access layer for sales / orders. Same conventions as inventoryMock.
-// See docs/BACKEND_HANDOVER.md §3 for the proposed API contract.
+// See docs/BACKEND_HANDOVER.md for the proposed API contract.
 
 import { salesData as mockSales, paymentMethods } from '../data/mockData';
 

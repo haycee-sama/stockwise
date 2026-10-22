@@ -28,7 +28,7 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     // Log to console. In production this should also be sent to Sentry
-    // or similar (see docs/ENVIRONMENT_SETUP.md §10).
+    // or similar (see docs/BACKEND_HANDOVER.md).
     console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
     this.setState({ errorInfo });
   }

@@ -1,5 +1,5 @@
 // src/services/expensesMock.js
-// Mock data-access layer for expenses. See docs/BACKEND_HANDOVER.md §6.
+// Mock data-access layer for expenses. See docs/BACKEND_HANDOVER.md.
 
 import { expensesData as mockExpenses, expenseCategories, expensePaymentMethods } from '../data/mockData';
 

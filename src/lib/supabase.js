@@ -14,8 +14,8 @@
 //   key. The service_role key bypasses Row Level Security and must never be
 //   shipped to the browser.
 // - All write authorisation must be enforced by RLS policies on the database
-//   side. See supabase/migrations/0002_rls_policies.sql and
-//   docs/SUPABASE_SETUP.md.
+//   side. See docs/BACKEND_HANDOVER.md for the data contract and the
+//   required RLS policies.
 //
 // This file deliberately does NOT throw if Supabase is unconfigured — that
 // would crash every page including the demo screens. Callers should check
@@ -45,7 +45,7 @@ if (isSupabaseConfigured) {
   if (typeof console !== 'undefined' && console.info) {
     console.info(
       '[stockwise] Supabase is not configured (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY missing). ' +
-      'Running in demo mode with mock data. See docs/SUPABASE_SETUP.md.',
+      'Running in demo mode with mock data. See docs/BACKEND_HANDOVER.md.',
     );
   }
 }

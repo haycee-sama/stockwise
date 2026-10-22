@@ -1,6 +1,6 @@
 // src/pages/DashboardPage.jsx
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   DollarSign, TrendingUp, Package, AlertCircle,
   Plus, Download, Clock, CheckCircle, ArrowRight,
@@ -16,7 +16,7 @@ import LowStockTable   from '../components/dashboard/LowStockTable';
 import DemoModeBanner  from '../components/common/DemoModeBanner';
 import { LoadingState, ErrorState } from '../components/common/ResourceState';
 import { useAuth }     from '../context/useAuth';
-import { dashboardService } from '../services';
+import { dashboardService, salesService } from '../services';
 import { dashboardStats as demoStats } from '../data/mockData';
 import { useBusiness } from '../context/useBusiness';
 
@@ -169,14 +169,24 @@ export default function DashboardPage() {
       outOfStock: s.outOfStock ?? 0,
       lowStock: s.lowStock ?? 0,
     };
-  }, [summaryStats, isDemoMode, period]);
+  }, [summaryStats, isDemoMode]);
 
   // Recent sales for the activity feed (latest 4)
   const recentSales = recentSalesData;
 
   // ── Handlers ─────────────────────────────────
-  const handleFulfil = useCallback((id) => {
+  // Mark a pending sale as completed on the server, then drop it from
+  // the local pending-orders list. Without the server update, reload
+  // would surface the order as still pending — the local "fulfil" was
+  // decorative only.
+  const handleFulfil = useCallback(async (id) => {
+    const { error } = await salesService.update(id, { status: 'completed' });
+    if (error) {
+      console.error('[DashboardPage] fulfil sale failed:', error);
+      return;
+    }
     setOrders(prev => prev.filter(o => o.id !== id));
+    setPendingOrdersData(prev => prev.filter(o => o.id !== id));
   }, []);
 
   // P1-003 fix: use React Router's navigate() instead of window.location.href.
@@ -457,10 +467,10 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-gray-400">Latest transactions</p>
                 </div>
               </div>
-              <a href="/sales"
+              <Link to="/sales"
                 className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 transition-colors">
                 View all <ArrowRight size={12} />
-              </a>
+              </Link>
             </div>
 
             {/* Mobile: cards */}
@@ -537,10 +547,10 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <a href="/sales"
+              <Link to="/sales"
                 className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 transition-colors">
                 View all <ArrowRight size={12} />
-              </a>
+              </Link>
             </div>
 
             {orders.length === 0 ? (

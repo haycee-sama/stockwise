@@ -24,10 +24,6 @@ dist-ssr
 !.env.example.*
 !.env.test.local
 
-# Supabase local dev artifacts (CLI-generated, may contain local-only secrets)
-supabase/.branches
-supabase/.temp
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

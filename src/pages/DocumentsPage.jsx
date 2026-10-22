@@ -4,7 +4,7 @@
 // - Upload of supporting documents (rent receipts, utility bills).
 // - Per-business-scoped storage (likely Supabase Storage buckets with
 //   RLS policies matching the business_id).
-// See docs/BACKEND_HANDOVER.md §9.
+// See docs/BACKEND_HANDOVER.md (Section F, outstanding integration tasks).
 
 import ComingSoon from '../components/common/ComingSoon';
 

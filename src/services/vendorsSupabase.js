@@ -210,8 +210,15 @@ export async function placeOrder(vendorId, newOrder, total) {
     .single();
   if (poErr) return { data: null, error: { code: poErr.code, message: poErr.message } };
 
-  // Insert line items (only valid ones).
-  const lineItems = (newOrder.items ?? [])
+  // Insert line items (only valid ones). The frontend sends the array
+  // in `newOrder.lineItems`; older callers may have used `newOrder.items`
+  // (an array of {name, qty, unitPrice}). Accept either; the count
+  // version of `newOrder.items` (a number) is intentionally rejected by
+  // the Array.isArray guard.
+  const itemsArray = Array.isArray(newOrder.lineItems)
+    ? newOrder.lineItems
+    : (Array.isArray(newOrder.items) ? newOrder.items : []);
+  const lineItems = itemsArray
     .filter(i => i.name && i.qty > 0 && Number(i.unitPrice) > 0)
     .map(i => ({
       purchase_order_id: po.id,
@@ -242,13 +249,34 @@ export async function listStatuses() {
 }
 
 // Receive a purchase order — calls the sw_receive_purchase_order RPC.
-// The RPC is defined in supabase/migrations/0004_sw_receive_purchase_order.sql.
-// NOT YET APPLIED to the dev project — the user must apply it via the
-// SQL Editor before this method will work.
+// The RPC is defined in docs/BACKEND_HANDOVER.md (Section C, PO receiving).
+//
+// `purchaseOrderId` may be either a UUID (the table primary key) or a
+// display_id (e.g. `PO-001`). The mock callers and the VendorDrawer
+// display use the display_id; the RPC requires a UUID. We resolve the
+// display_id → UUID here so the rest of the app keeps the user-facing
+// display_id.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function receivePurchaseOrder(purchaseOrderId) {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
+
+  let poUuid = purchaseOrderId;
+  if (!UUID_RE.test(String(purchaseOrderId))) {
+    // Resolve display_id → UUID. Must match the business's own POs
+    // (RLS will scope the SELECT correctly).
+    const { data: po, error: lookupErr } = await supabase
+      .from('sw_purchase_orders')
+      .select('id')
+      .eq('display_id', purchaseOrderId)
+      .maybeSingle();
+    if (lookupErr) return { data: null, error: { code: lookupErr.code, message: lookupErr.message } };
+    if (!po) return { data: null, error: { code: 'NOT_FOUND', message: `Purchase order ${purchaseOrderId} not found` } };
+    poUuid = po.id;
+  }
+
   const { data, error } = await supabase.rpc('sw_receive_purchase_order', {
-    p_purchase_order_id: purchaseOrderId,
+    p_purchase_order_id: poUuid,
   });
   if (error) return { data: null, error: { code: error.code, message: error.message } };
   return { data, error: null };

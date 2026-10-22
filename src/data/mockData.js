@@ -97,7 +97,7 @@ export const salesData = [
       { name: 'Bodysuit (Black)', qty: 3, price: 2800 },
       { name: 'Ankara Gown (M)', qty: 2, price: 3000 },
     ],
-    total: 14400, payment: 'POS', status: 'pending',
+    total: 14400, payment: 'Card', status: 'pending',
     date: '2026-03-20T16:45:00', note: 'Awaiting delivery confirmation',
   },
   {
@@ -134,7 +134,7 @@ export const salesData = [
       { name: 'Polo Shirt (L)', qty: 3, price: 3500 },
       { name: 'Cap (Unisex)',   qty: 3, price: 1500 },
     ],
-    total: 15000, payment: 'POS', status: 'completed',
+    total: 15000, payment: 'Card', status: 'completed',
     date: '2026-03-15T15:30:00', note: '',
   },
   {
@@ -150,7 +150,7 @@ export const salesData = [
   },
 ];
 
-export const paymentMethods = ['Cash', 'Transfer', 'POS'];
+export const paymentMethods = ['Cash', 'Transfer', 'Card'];
 
 export const customersData = [
   { id: 1, firstName: 'Chidinma', lastName: 'Eze',     initials: 'CE', color: '#fce7f3', textColor: '#9d174d', email: 'chidinma.eze@gmail.com',    phone: '+234 803 456 7890', type: 'Retailer',   location: 'Ikeja, Lagos',           status: 'active',   joinDate: '2025-08-14', totalSpent: 84500,  totalOrders: 12, lastOrder: '2026-03-21', note: 'Prefers Ankara styles. Usually orders in bulk.', orders: [{ id: 'ORD-0342', date: '2026-03-21', total: 23500, status: 'completed', items: 3 }, { id: 'ORD-0318', date: '2026-03-05', total: 18000, status: 'completed', items: 2 }, { id: 'ORD-0290', date: '2026-02-14', total: 43000, status: 'completed', items: 5 }] },
@@ -246,7 +246,7 @@ export const salesTrendData = [
 export const paymentBreakdown = [
   { name: 'Bank Transfer', value: 58, color: '#16a34a' },
   { name: 'Cash',          value: 27, color: '#3b82f6' },
-  { name: 'POS',           value: 15, color: '#f59e0b' },
+  { name: 'Card',          value: 15, color: '#f59e0b' },
 ];
 
 export const topProductsReport = [

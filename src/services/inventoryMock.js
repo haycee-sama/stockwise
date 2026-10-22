@@ -6,10 +6,9 @@
 //
 // All mutations here are in-memory only — they mutate the shared mock
 // array AND call back to local React state via the consumer. Nothing
-// persists across a page reload. See docs/SUPABASE_SETUP.md §"What is
-// NOT implemented".
+// persists across a page reload. See docs/BACKEND_HANDOVER.md.
 //
-// The shape mirrors the proposed API in docs/BACKEND_HANDOVER.md §2.
+// The shape mirrors the proposed API in docs/BACKEND_HANDOVER.md.
 
 import { inventoryItems as mockItems, categories as mockCategories, suppliers as mockSuppliers } from '../data/mockData';
 

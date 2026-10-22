@@ -5,9 +5,9 @@
 // - Supabase mode: calls `supabase.auth.resetPasswordForEmail(email)`.
 //   Supabase sends a real email with a reset link. The link target
 //   must be configured in the Supabase dashboard (Auth → URL
-//   Configuration → Site URL + Redirect URLs). Out of scope for this
-//   phase: building the `/reset-password` page that the email links to.
-//   See docs/SUPABASE_SETUP.md §"What remains incomplete".
+//   Configuration → Site URL + Redirect URLs). The `/reset-password`
+//   route is implemented in `src/pages/auth/ResetPasswordPage.jsx`.
+//   See docs/BACKEND_HANDOVER.md.
 //
 // - Demo mode: shows a clear "demo mode — email sending is not
 //   configured" message and does NOT pretend to send an email.
@@ -90,7 +90,7 @@ export default function ForgotPasswordPage() {
           {authMode === 'demo' && (
             <div className="mb-5 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-amber-700 text-xs font-medium">
               <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-              <span>Demo mode — email sending is not configured. Supabase must be set up to actually send a reset link. See <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">docs/SUPABASE_SETUP.md</code>.</span>
+              <span>Demo mode — email sending is not configured. Supabase must be set up to actually send a reset link. See <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">docs/BACKEND_HANDOVER.md</code>.</span>
             </div>
           )}
 

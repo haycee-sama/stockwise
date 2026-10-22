@@ -5,7 +5,7 @@
 // 1. Supabase mode (active when VITE_SUPABASE_URL and
 //    VITE_SUPABASE_PUBLISHABLE_KEY are both configured):
 //    - Uses Supabase Auth (email + password today; phone/OTP / OAuth
-//      are out of scope for this phase — see docs/SUPABASE_SETUP.md).
+//      are out of scope for this phase — see docs/BACKEND_HANDOVER.md).
 //    - Restores the session on refresh via Supabase's auto-persisted
 //      localStorage token (P1-001 fix).
 //    - Subscribes to `onAuthStateChange` for token refresh / sign-out /
