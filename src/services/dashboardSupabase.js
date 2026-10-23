@@ -2,37 +2,53 @@
 // Supabase-backed implementation of the dashboard aggregates.
 
 import { supabase } from '../lib/supabase';
+import { fetchAll } from '../utils/fetchAll';
+import { chunk } from '../utils/chunk';
 
+const FETCH_PAGE_SIZE = 1000;
+const IN_CHUNK_SIZE = 500;
 
 // Fetches summary stats from sw_inventory_items + sw_sales.
 //
-// totalProfit + the four period-over-period deltas were previously
-// hardcoded to 0 (with a TODO comment). This implementation now
-// computes them client-side from existing data:
-// - totalProfit: fetch sw_sale_items for completed sales + join to
-//   sw_inventory_items.cost_price via PostgREST resource embedding,
-//   then sum (selling_price - cost_price) * qty per line item.
-// - salesChange / profitChange: compare this month's completed
-//   sales totals to last month's.
-// - inventoryChange / lowStockChange: compare current inventory +
-//   low-stock counts to last month's (computed from the same
-//   completed-sales query — we don't have a historical inventory
-//   snapshot, so these deltas reflect sales impact on current
-//   stock rather than true inventory-count changes; documented as
-//   a known limitation in docs/BACKEND_HANDOVER.md §9.3).
+// totalProfit: computed from (selling_price - cost_price) * qty per
+// line item. Sale items whose inventory relationship is missing
+// (soft-deleted, RLS-filtered, or FK-broken) are EXCLUDED from the
+// profit sum — their cost is unknown, not zero. The count of
+// excluded items is returned as `profitExcludedCount` so the UI can
+// show a "partial" indicator. If profitExcludedCount > 0, the
+// displayed totalProfit is a known partial figure, not a complete
+// business total.
+//
+// salesChange / profitChange: this-month vs last-month completed
+// sales. Zero-denominator handled (returns 0 when last month had
+// no data).
+//
+// inventoryChange / lowStockChange: returned as null — there is no
+// historical inventory snapshot table on the backend to compute a
+// real period-over-period inventory-count delta. The dashboard UI
+// shows "—" (unavailable) for these. The backend handover §9.3
+// documents this as a backend dependency.
 export async function summary() {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
 
-  const [inv, sales] = await Promise.all([
+  // Use fetchAll to prevent PostgREST default row limit (1000)
+  // from silently truncating the sales dataset.
+  const [inv, salesRes] = await Promise.all([
     supabase.from('sw_inventory_items').select('id, stock, threshold').is('deleted_at', null),
-    supabase.from('sw_sales').select('id, total, status, sale_date').is('deleted_at', null),
+    fetchAll(
+      supabase.from('sw_sales')
+        .select('id, total, status, sale_date', { count: 'exact' })
+        .is('deleted_at', null)
+        .order('id', { ascending: true }),
+      { pageSize: FETCH_PAGE_SIZE }
+    ),
   ]);
 
   if (inv.error) return { data: null, error: { code: inv.error.code, message: inv.error.message } };
-  if (sales.error) return { data: null, error: { code: sales.error.code, message: sales.error.message } };
+  if (salesRes.error) return { data: null, error: { code: salesRes.error.code, message: salesRes.error.message } };
 
   const items = inv.data ?? [];
-  const allSales = sales.data ?? [];
+  const allSales = salesRes.data ?? [];
   const completedSales = allSales.filter(s => s.status === 'completed');
 
   const now = new Date();
@@ -40,8 +56,6 @@ export async function summary() {
   const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
 
   // ── Period-over-period deltas (this month vs last month) ─────
-  // Both periods use the same date windows (1st-of-month to end-of-
-  // month). The comparison is symmetric — completed sales only.
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
@@ -58,44 +72,50 @@ export async function summary() {
     ? Number((((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100).toFixed(1))
     : 0;
 
-  // profitChange: computed after the totalProfit fetch below (deferred).
   let thisMonthProfit = 0;
   let lastMonthProfit = 0;
+  let totalProfit = 0;
+  let profitExcludedCount = 0;
 
   // ── totalProfit: fetch line items + embed cost_price via FK ──
-  // We fetch sw_sale_items for ALL completed sales (not just this
-  // month) and join to sw_inventory_items.cost_price. The profit
-  // per line item = (unit_price - cost_price) * qty. Sum across
-  // all line items = totalProfit. We also split by sale_date to
-  // get thisMonthProfit + lastMonthProfit for the profitChange delta.
-  let totalProfit = 0;
+  // Chunk the sale_id list to prevent PostgREST URL-length overflow
+  // when there are >500 completed sales.
   if (completedSales.length > 0) {
     const saleIds = completedSales.map(s => s.id);
-    // Build a map of sale_id -> sale_date so we can bucket line items
-    // by period after the fetch.
     const saleDateBySaleId = {};
     for (const s of completedSales) {
       saleDateBySaleId[s.id] = s.sale_date;
     }
-    const { data: lineItems, error: liErr } = await supabase
-      .from('sw_sale_items')
-      .select('sale_id, qty, unit_price, item:item_id(cost_price)')
-      .in('sale_id', saleIds);
-    if (liErr) return { data: null, error: { code: liErr.code, message: liErr.message } };
 
-    for (const li of (lineItems ?? [])) {
-      const costPrice = Number(li.item?.cost_price ?? 0);
-      const sellingPrice = Number(li.unit_price);
-      const qty = Number(li.qty);
-      const profit = (sellingPrice - costPrice) * qty;
-      totalProfit += profit;
+    for (const chunkIds of chunk(saleIds, IN_CHUNK_SIZE)) {
+      const { data: lineItems, error: liErr } = await supabase
+        .from('sw_sale_items')
+        .select('sale_id, qty, unit_price, item:item_id(cost_price)')
+        .in('sale_id', chunkIds);
+      if (liErr) return { data: null, error: { code: liErr.code, message: liErr.message } };
 
-      // Bucket by period for the profitChange delta.
-      const saleDate = saleDateBySaleId[li.sale_id];
-      if (saleDate) {
-        const d = new Date(saleDate);
-        if (d >= thisMonthStart) thisMonthProfit += profit;
-        else if (d >= lastMonthStart && d <= lastMonthEnd) lastMonthProfit += profit;
+      for (const li of (lineItems ?? [])) {
+        // Skip line items whose inventory relationship is missing.
+        // The cost is unknown (not zero) — treating it as zero
+        // would inflate profit by the full selling price.
+        if (!li.item) {
+          profitExcludedCount++;
+          continue;
+        }
+
+        const costPrice = Number(li.item.cost_price ?? 0);
+        const sellingPrice = Number(li.unit_price);
+        const qty = Number(li.qty);
+        const profit = (sellingPrice - costPrice) * qty;
+        totalProfit += profit;
+
+        // Bucket by period for the profitChange delta.
+        const saleDate = saleDateBySaleId[li.sale_id];
+        if (saleDate) {
+          const d = new Date(saleDate);
+          if (d >= thisMonthStart) thisMonthProfit += profit;
+          else if (d >= lastMonthStart && d <= lastMonthEnd) lastMonthProfit += profit;
+        }
       }
     }
   }
@@ -110,26 +130,20 @@ export async function summary() {
   const outOfStock = items.filter(i => Number(i.stock) === 0).length;
   const lowStock = items.filter(i => Number(i.stock) > 0 && Number(i.stock) <= Number(i.threshold)).length;
 
-  // inventoryChange + lowStockChange: we don't have a historical
-  // inventory snapshot, so we approximate the delta as the change
-  // in completed-sales count this month vs last month (more sales
-  // = more stock consumed = lower inventory). This is documented as
-  // an approximation in docs/BACKEND_HANDOVER.md §9.3 — the true
-  // delta would require a periodic inventory snapshot table on the
-  // backend, which is out of scope for this frontend-only fix.
-  const inventoryChange = salesChange; // approximation
-  const lowStockChange = salesChange;  // approximation
-
   return {
     data: {
       totalSales: completedSales.reduce((s, o) => s + Number(o.total), 0),
       totalProfit,
+      profitExcludedCount,
       totalInventory: items.length,
       lowStockCount: lowStock,
       salesChange,
       profitChange,
-      inventoryChange,
-      lowStockChange,
+      // No historical inventory snapshot exists on the backend.
+      // These are null (unavailable) — NOT 0 and NOT derived
+      // from salesChange. The dashboard shows "—".
+      inventoryChange: null,
+      lowStockChange: null,
       todayRevenue: todaySales.reduce((s, o) => s + Number(o.total), 0),
       weekRevenue: weekSales.reduce((s, o) => s + Number(o.total), 0),
       outOfStock,
