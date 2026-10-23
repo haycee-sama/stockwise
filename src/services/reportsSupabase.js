@@ -1,28 +1,33 @@
 // src/services/reportsSupabase.js
 // Supabase-backed implementation of the Reports page aggregates.
-// These queries are intentionally simple — for a real production
-// deployment they should be replaced with materialised views.
+//
+// These queries use fetchAll() to prevent PostgREST's default row
+// limit (1000) from silently truncating the dataset. The .in()
+// queries on sw_sale_items use chunk() to prevent URL-length
+// overflow when there are >500 completed sales.
 
 import { supabase } from '../lib/supabase';
+import { fetchAll } from '../utils/fetchAll';
+import { chunk } from '../utils/chunk';
+
+const FETCH_PAGE_SIZE = 1000;
+const IN_CHUNK_SIZE = 500;
 
 export async function salesReport() {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
-  // Aggregate COMPLETED sales by month for the last 6 months.
-  //
-  // We filter to status='completed' at the query level so that
-  // `revenue` (sum of totals) and `orders` (count of rows) are
-  // consistent. The previous implementation summed revenue across
-  // ALL sales (including pending + cancelled) while only counting
-  // completed orders — which inflated `avgOrder = revenue / orders`.
-  const { data: sales, error } = await supabase
-    .from('sw_sales')
-    .select('id, sale_date, total, status, payment')
-    .eq('status', 'completed')
-    .is('deleted_at', null)
-    .order('sale_date', { ascending: true });
-  if (error) return { data: null, error: { code: error.code, message: error.message } };
 
-  const completedSales = sales ?? [];
+  // Use fetchAll to prevent PostgREST default row limit truncation.
+  const salesRes = await fetchAll(
+    supabase.from('sw_sales')
+      .select('id, sale_date, total, status, payment', { count: 'exact' })
+      .eq('status', 'completed')
+      .is('deleted_at', null)
+      .order('id', { ascending: true }),
+    { pageSize: FETCH_PAGE_SIZE }
+  );
+  if (salesRes.error) return { data: null, error: salesRes.error };
+
+  const completedSales = salesRes.data ?? [];
 
   // ── Monthly trend (last 6 months with sales) ─────────────────
   const byMonth = {};
@@ -35,18 +40,19 @@ export async function salesReport() {
   }
   const trend = Object.values(byMonth).slice(-6);
 
-  const totals = trend.reduce((acc, m) => {
-    acc.revenue += m.revenue;
-    acc.profit += m.profit;
-    acc.orders += m.orders;
+  // ── Lifetime totals (computed from the COMPLETE dataset) ─────
+  // Previously `totals` was reduced from `trend.slice(-6)` —
+  // understating revenue/orders for businesses with >6 months of
+  // sales. Now `totals` reflects ALL completed sales.
+  const totals = completedSales.reduce((acc, s) => {
+    acc.revenue += Number(s.total);
+    acc.orders += 1;
     return acc;
   }, { revenue: 0, profit: 0, orders: 0 });
   totals.avgOrder = totals.orders > 0 ? Math.round(totals.revenue / totals.orders) : 0;
-  totals.margin = totals.revenue > 0 ? Math.round((totals.profit / totals.revenue) * 100) : 0;
+  totals.margin = 0; // set after profit computation below
 
-  // ── Payment-method breakdown (computed from the same sales) ──
-  // Each sale has exactly one `payment` value — no double-counting
-  // risk. The breakdown sums to 100% when revenue > 0.
+  // ── Payment-method breakdown (from the same completed sales) ─
   const byPayment = {};
   for (const s of completedSales) {
     const p = s.payment ?? 'Unknown';
@@ -61,45 +67,84 @@ export async function salesReport() {
     }))
     .sort((a, b) => b.value - a.value);
 
-  // ── Top products (by revenue) ─────────────────────────────────
-  // Fetch line items for all completed sales in a single batched
-  // query, then aggregate by item_id. Embed the inventory item name
-  // via PostgREST resource embedding so the table can show the
-  // product name without a separate sw_inventory_items lookup.
-  // If the inventory item has been soft-deleted AND the FK filters
-  // it out, `item` will be null and we display 'Unavailable product'.
+  // ── Top products + monthly profit (from line items) ─────────
+  // Chunk the sale_id list to prevent PostgREST URL-length overflow.
+  // Embed item name + cost_price via PostgREST resource embedding.
   let topProducts = [];
+  let totalProfit = 0;
+  let profitExcludedCount = 0;
+  const profitByMonth = {};
+
   if (completedSales.length > 0) {
     const saleIds = completedSales.map(s => s.id);
-    const { data: lineItems, error: liErr } = await supabase
-      .from('sw_sale_items')
-      .select('item_id, qty, unit_price, item:item_id(name, sku)')
-      .in('sale_id', saleIds);
-    if (liErr) return { data: null, error: { code: liErr.code, message: liErr.message } };
+    const saleDateBySaleId = {};
+    for (const s of completedSales) {
+      saleDateBySaleId[s.id] = s.sale_date;
+    }
 
     const byItem = {};
-    for (const li of (lineItems ?? [])) {
-      const id = li.item_id;
-      if (!byItem[id]) {
-        byItem[id] = {
-          name: li.item?.name ?? 'Unavailable product',
-          sku: li.item?.sku ?? 'SKU-?',
-          sold: 0,
-          revenue: 0,
-          growth: 0, // growth not computed — would need a prior period
-        };
+
+    for (const chunkIds of chunk(saleIds, IN_CHUNK_SIZE)) {
+      const { data: lineItems, error: liErr } = await supabase
+        .from('sw_sale_items')
+        .select('sale_id, item_id, qty, unit_price, item:item_id(name, sku, cost_price)')
+        .in('sale_id', chunkIds);
+      if (liErr) return { data: null, error: { code: liErr.code, message: liErr.message } };
+
+      for (const li of (lineItems ?? [])) {
+        const id = li.item_id;
+        if (!byItem[id]) {
+          byItem[id] = {
+            name: li.item?.name ?? 'Unavailable product',
+            sku: li.item?.sku ?? 'SKU-?',
+            sold: 0,
+            revenue: 0,
+            growth: 0,
+          };
+        }
+        byItem[id].sold += Number(li.qty);
+        byItem[id].revenue += Number(li.qty) * Number(li.unit_price);
+
+        // Profit per line item: skip items with missing cost data.
+        // Track the count of excluded items so the UI can show a
+        // "partial" indicator.
+        if (!li.item) {
+          profitExcludedCount++;
+          continue;
+        }
+
+        const costPrice = Number(li.item.cost_price ?? 0);
+        const sellingPrice = Number(li.unit_price);
+        const qty = Number(li.qty);
+        const profit = (sellingPrice - costPrice) * qty;
+        totalProfit += profit;
+
+        // Bucket profit by month for the trend.
+        const saleDate = saleDateBySaleId[li.sale_id];
+        if (saleDate) {
+          const d = new Date(saleDate);
+          const key = d.toLocaleDateString('en-US', { month: 'short' });
+          if (!profitByMonth[key]) profitByMonth[key] = 0;
+          profitByMonth[key] += profit;
+        }
       }
-      byItem[id].sold += Number(li.qty);
-      byItem[id].revenue += Number(li.qty) * Number(li.unit_price);
     }
+
     topProducts = Object.values(byItem)
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
+
+    // Update totals.profit + totals.margin with the real profit.
+    totals.profit = totalProfit;
+    totals.margin = totals.revenue > 0 ? Math.round((totalProfit / totals.revenue) * 100) : 0;
+
+    // Update trend months with real profit.
+    for (const m of trend) {
+      m.profit = profitByMonth[m.month] ?? 0;
+    }
   }
 
   // ── Month-over-month growth (last two trend points) ──────────
-  // If the trend has fewer than 2 months, growth is 0 (no prior
-  // period to compare). Otherwise compute (this - last) / last * 100.
   let momGrowthPct = 0;
   if (trend.length >= 2) {
     const last = trend[trend.length - 2];
@@ -110,7 +155,14 @@ export async function salesReport() {
   }
 
   return {
-    data: { totals, trend, momGrowthPct, topProducts, paymentBreakdown },
+    data: {
+      totals,
+      trend,
+      momGrowthPct,
+      topProducts,
+      paymentBreakdown,
+      profitExcludedCount,
+    },
     error: null,
   };
 }
@@ -141,33 +193,35 @@ export async function inventoryReport() {
 
 export async function customersReport() {
   if (!supabase) return { data: null, error: { code: 'NOT_CONFIGURED', message: 'Supabase client not configured' } };
-  // Fetch all customers + all completed sales in parallel. We then
-  // join in JS to compute per-customer totalSpent + totalOrders
-  // without an N+1 query per customer. The sales query is filtered
-  // to status='completed' so totalSpent reflects realised revenue
-  // only — pending sales don't count toward a customer's lifetime
-  // spend until they're fulfilled.
+
+  // Use fetchAll for both queries to prevent PostgREST truncation.
   const [custRes, salesRes] = await Promise.all([
-    supabase.from('sw_customers')
-      .select('id, first_name, last_name, type, status, created_at')
-      .is('deleted_at', null),
-    supabase.from('sw_sales')
-      .select('id, customer_id, total, status, sale_date')
-      .eq('status', 'completed')
-      .is('deleted_at', null),
+    fetchAll(
+      supabase.from('sw_customers')
+        .select('id, first_name, last_name, type, status, created_at')
+        .is('deleted_at', null)
+        .order('id', { ascending: true }),
+      { pageSize: FETCH_PAGE_SIZE }
+    ),
+    fetchAll(
+      supabase.from('sw_sales')
+        .select('id, customer_id, total, status, sale_date')
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .order('id', { ascending: true }),
+      { pageSize: FETCH_PAGE_SIZE }
+    ),
   ]);
-  if (custRes.error) return { data: null, error: { code: custRes.error.code, message: custRes.error.message } };
-  if (salesRes.error) return { data: null, error: { code: salesRes.error.code, message: salesRes.error.message } };
+  if (custRes.error) return { data: null, error: custRes.error };
+  if (salesRes.error) return { data: null, error: salesRes.error };
 
   const customers = custRes.data ?? [];
   const completedSales = salesRes.data ?? [];
 
   // ── Per-customer aggregates (joined in JS) ────────────────────
-  // Each completed sale belongs to exactly one customer (or null
-  // for walk-in). We sum totals + count orders per customer_id.
   const statsByCust = {};
   for (const s of completedSales) {
-    if (!s.customer_id) continue; // walk-in sales don't count toward any customer
+    if (!s.customer_id) continue;
     if (!statsByCust[s.customer_id]) statsByCust[s.customer_id] = { totalSpent: 0, totalOrders: 0 };
     statsByCust[s.customer_id].totalSpent += Number(s.total);
     statsByCust[s.customer_id].totalOrders += 1;
@@ -181,10 +235,6 @@ export async function customersReport() {
   }
 
   // ── Top customers by totalSpent (real, computed) ─────────────
-  // Sort by totalSpent desc, take top 5. Each row includes the
-  // real type + status from the customer record. The shaped row
-  // matches what ReportsPage's CustomerReport expects (name, type,
-  // totalSpent, totalOrders) — no mock data.
   const topCustomers = customers
     .map(c => ({
       id: c.id,
@@ -200,16 +250,11 @@ export async function customersReport() {
     .slice(0, 5);
 
   // ── Customer-acquisition trend (new customers per month) ────
-  // Group customers by the month they were created (created_at).
-  // Each customer counts exactly once — at the month they joined.
-  // Returning customers are not tracked separately today (would
-  // require a sales-history join per month — out of scope for the
-  // current report; the backend handover §9.3 documents this gap).
   const byMonth = {};
   const now = new Date();
   for (const c of customers) {
     const d = new Date(c.created_at);
-    if (d > now) continue; // ignore future-dated records (defensive)
+    if (d > now) continue;
     const key = d.toLocaleDateString('en-US', { month: 'short' });
     if (!byMonth[key]) byMonth[key] = { month: key, newCustomers: 0, returning: 0 };
     byMonth[key].newCustomers += 1;

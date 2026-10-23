@@ -667,13 +667,18 @@ misconfigured because of these.
   (previously hardcoded 0).
 - `dashboardSupabase.summary()` now computes `totalProfit` from
   `sw_sale_items` joined to `sw_inventory_items.cost_price` via
-  PostgREST resource embedding (`item:item_id(cost_price)`). The
-  four period-over-period deltas (`salesChange`, `profitChange`,
-  `inventoryChange`, `lowStockChange`) are now computed by comparing
-  this month's vs last month's completed sales. `inventoryChange` +
-  `lowStockChange` are approximated from `salesChange` (no historical
-  inventory snapshot table exists on the backend — the true delta
-  would require a periodic snapshot, which is a backend responsibility).
+  PostgREST resource embedding (`item:item_id(cost_price)`). Sale
+  items with missing cost data (soft-deleted inventory, FK broken)
+  are EXCLUDED from the profit sum — their cost is unknown, not
+  zero. The count of excluded items is returned as
+  `profitExcludedCount` so the UI can show a "partial" indicator.
+  `salesChange` + `profitChange` are computed from this-month vs
+  last-month completed sales. `inventoryChange` + `lowStockChange`
+  are returned as `null` (unavailable) — there is no historical
+  inventory snapshot table on the backend to compute a real
+  period-over-period inventory-count delta. The dashboard shows
+  "—" for these. A periodic inventory snapshot table is a backend
+  dependency documented below.
 - `reportsSupabase.salesReport()` now computes `topProducts` (by
   revenue, from `sw_sale_items` joined to `sw_inventory_items` via
   PostgREST), `paymentBreakdown` (grouped by payment method with pct),

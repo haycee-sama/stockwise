@@ -316,23 +316,35 @@ export default function DashboardPage() {
             changeLabel="vs last month"
             animDelay="0.05s"
           />
-          <StatCard
-            icon={TrendingUp}
-            iconBg="bg-blue-100" iconColor="text-blue-600"
-            label="Net Profit"
-            value={(summaryStats ?? (isDemoMode ? demoStats : {totalProfit: 0})).totalProfit}
-            valueType="currency"
-            change={(summaryStats ?? (isDemoMode ? demoStats : {profitChange: 0})).profitChange}
-            changeLabel="vs last month"
-            animDelay="0.10s"
-          />
+          <div className="relative">
+            <StatCard
+              icon={TrendingUp}
+              iconBg="bg-blue-100" iconColor="text-blue-600"
+              label="Net Profit"
+              value={(summaryStats ?? (isDemoMode ? demoStats : {totalProfit: 0})).totalProfit}
+              valueType="currency"
+              change={(summaryStats ?? (isDemoMode ? demoStats : {profitChange: 0})).profitChange}
+              changeLabel="vs last month"
+              animDelay="0.10s"
+            />
+            {/* Partial-profit indicator: when some sale items have
+                missing cost data (soft-deleted inventory, FK broken),
+                the displayed profit is a known partial figure. Show
+                an honest label so the user doesn’t mistake it for a
+                complete total. */}
+            {(summaryStats?.profitExcludedCount ?? 0) > 0 && (
+              <div className="absolute -bottom-1 left-5 right-5 text-[10px] text-amber-600 font-medium bg-amber-50 rounded-md px-2 py-0.5 border border-amber-200" title={`${summaryStats.profitExcludedCount} sale item(s) have missing cost data — profit is a partial figure.`}>
+                Partial: {summaryStats.profitExcludedCount} item(s) with unavailable cost
+              </div>
+            )}
+          </div>
           <StatCard
             icon={Package}
             iconBg="bg-purple-100" iconColor="text-purple-600"
             label="Inventory Items"
             value={(summaryStats ?? (isDemoMode ? demoStats : {totalInventory: 0})).totalInventory}
             valueType="number"
-            change={(summaryStats ?? (isDemoMode ? demoStats : {inventoryChange: 0})).inventoryChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {inventoryChange: null})).inventoryChange}
             changeLabel="vs last month"
             animDelay="0.15s"
           />
@@ -342,7 +354,7 @@ export default function DashboardPage() {
             label="Low Stock Alerts"
             value={(summaryStats ?? (isDemoMode ? demoStats : {lowStockCount: 0})).lowStockCount}
             valueType="number"
-            change={(summaryStats ?? (isDemoMode ? demoStats : {lowStockChange: 0})).lowStockChange}
+            change={(summaryStats ?? (isDemoMode ? demoStats : {lowStockChange: null})).lowStockChange}
             changeLabel="new this week"
             animDelay="0.20s"
           />

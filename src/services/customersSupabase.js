@@ -2,6 +2,7 @@
 // Supabase-backed implementation of the customers service.
 
 import { supabase } from '../lib/supabase';
+import { chunk } from '../utils/chunk';
 
 const AVATAR_COLORS = [
   { color: '#fce7f3', textColor: '#9d174d' },
@@ -67,26 +68,28 @@ export async function list({ search = '', type = 'All', status = 'All', page = 1
   const { data: rawData, error, count } = await query;
   if (error) return { data: null, error: { code: error.code, message: error.message } };
 
-  // Batch-fetch completed sales per customer in a single query so
+  // Batch-fetch completed sales per customer in chunked queries so
   // the list view can show per-customer totalSpent + totalOrders
   // (previously 0). We filter to status='completed' so totalSpent
-  // reflects realised revenue — pending sales don't count toward
-  // a customer's lifetime spend until they're fulfilled.
+  // reflects realised revenue. Chunk the customer_id list to prevent
+  // PostgREST URL-length overflow when the page has >500 customers.
   const customerIds = (rawData ?? []).map(c => c.id);
   let statsByCust = {};
   if (customerIds.length > 0) {
-    const { data: sales, error: salesErr } = await supabase
-      .from('sw_sales')
-      .select('customer_id, total, status')
-      .in('customer_id', customerIds)
-      .eq('status', 'completed')
-      .is('deleted_at', null);
-    if (salesErr) return { data: null, error: { code: salesErr.code, message: salesErr.message } };
-    for (const s of (sales ?? [])) {
-      if (!s.customer_id) continue; // defensive — the .in() filter should guarantee this
-      if (!statsByCust[s.customer_id]) statsByCust[s.customer_id] = { totalSpent: 0, totalOrders: 0, lastOrder: null };
-      statsByCust[s.customer_id].totalSpent += Number(s.total);
-      statsByCust[s.customer_id].totalOrders += 1;
+    for (const chunkIds of chunk(customerIds, 500)) {
+      const { data: sales, error: salesErr } = await supabase
+        .from('sw_sales')
+        .select('customer_id, total, status')
+        .in('customer_id', chunkIds)
+        .eq('status', 'completed')
+        .is('deleted_at', null);
+      if (salesErr) return { data: null, error: { code: salesErr.code, message: salesErr.message } };
+      for (const s of (sales ?? [])) {
+        if (!s.customer_id) continue;
+        if (!statsByCust[s.customer_id]) statsByCust[s.customer_id] = { totalSpent: 0, totalOrders: 0, lastOrder: null };
+        statsByCust[s.customer_id].totalSpent += Number(s.total);
+        statsByCust[s.customer_id].totalOrders += 1;
+      }
     }
   }
 

@@ -1,7 +1,8 @@
 // src/components/dashboard/StatCard.jsx
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 function formatValue(value, type) {
+  if (value === null || value === undefined) return '—';
   if (type === 'currency') {
     if (value >= 1000000) return `₦${(value / 1000000).toFixed(1)}M`;
     if (value >= 1000)    return `₦${(value / 1000).toFixed(0)}K`;
@@ -40,7 +41,11 @@ export default function StatCard({
   changeLabel,
   animDelay = '0s',
 }) {
-  const isPositive = change >= 0;
+  // When `change` is null or undefined, the metric is unavailable
+  // (e.g., inventoryChange has no historical data to compare).
+  // Show a neutral "—" badge instead of a fabricated percentage.
+  const changeUnavailable = change === null || change === undefined;
+  const isPositive = !changeUnavailable && change >= 0;
 
   return (
     <div
@@ -54,15 +59,22 @@ export default function StatCard({
           {Icon && <Icon size={20} className={iconColor} />}
         </div>
 
-        {/* Change badge */}
-        <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg
-          ${isPositive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
-          {isPositive
-            ? <TrendingUp size={11} />
-            : <TrendingDown size={11} />
-          }
-          {isPositive ? '+' : ''}{change}%
-        </div>
+        {/* Change badge — or unavailable indicator */}
+        {changeUnavailable ? (
+          <div className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg bg-gray-50 text-gray-400">
+            <Minus size={11} aria-hidden="true" />
+            <span aria-label="Metric unavailable">—</span>
+          </div>
+        ) : (
+          <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg
+            ${isPositive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+            {isPositive
+              ? <TrendingUp size={11} />
+              : <TrendingDown size={11} />
+            }
+            {isPositive ? '+' : ''}{change}%
+          </div>
+        )}
       </div>
 
       {/* Value */}
@@ -78,10 +90,10 @@ export default function StatCard({
 
       {/* Sparkline + change label row */}
       <div className="flex items-end justify-between">
-        <p className={`text-[11px] font-semibold ${isPositive ? 'text-green-600' : 'text-red-500'}`}>
+        <p className={`text-[11px] font-semibold ${changeUnavailable ? 'text-gray-400' : isPositive ? 'text-green-600' : 'text-red-500'}`}>
           {changeLabel}
         </p>
-        <Sparkline positive={isPositive} />
+        {!changeUnavailable && <Sparkline positive={isPositive} />}
       </div>
     </div>
   );
